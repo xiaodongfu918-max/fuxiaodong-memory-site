@@ -1,0 +1,3030 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OBJ 粒子模型预览</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: rgba(236, 244, 248, 0.88);
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    #gl {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    #storyCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      display: none;
+      opacity: 0;
+      transition: opacity 280ms ease;
+      mix-blend-mode: screen;
+    }
+
+    #subtitleCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .hud {
+      position: fixed;
+      left: 22px;
+      top: 20px;
+      width: min(360px, calc(100vw - 44px));
+      pointer-events: none;
+      user-select: none;
+      z-index: 5;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+      font-size: 21px;
+      font-weight: 500;
+      letter-spacing: 0;
+      color: rgba(250, 250, 246, 0.96);
+      text-shadow: 0 0 14px rgba(0, 0, 0, 0.95), 0 0 18px rgba(185, 120, 54, 0.18);
+    }
+
+    .status,
+    .hint {
+      margin: 0;
+      color: rgba(218, 229, 231, 0.86);
+      font-size: 13px;
+      line-height: 1.65;
+      text-shadow: 0 0 12px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.9);
+    }
+
+    .status strong {
+      color: #d5964e;
+      font-weight: 600;
+    }
+
+    .fallback {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      display: none;
+      width: min(420px, calc(100vw - 40px));
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(185, 120, 54, 0.45);
+      background: rgba(10, 12, 14, 0.84);
+      padding: 22px;
+      box-shadow: 0 0 50px rgba(185, 120, 54, 0.1);
+      z-index: 6;
+    }
+
+    .fallback.visible {
+      display: block;
+    }
+
+    .fallback p {
+      margin: 0 0 14px;
+      color: rgba(226, 236, 240, 0.84);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      color: rgba(226, 236, 240, 0.9);
+      border: 1px solid rgba(183, 199, 207, 0.25);
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .gesture-panel {
+      position: fixed;
+      left: 22px;
+      bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: min(520px, calc(100vw - 44px));
+      color: rgba(183, 199, 207, 0.76);
+      font-size: 12px;
+      line-height: 1.5;
+      user-select: none;
+      z-index: 5;
+    }
+
+    .gesture-panel button {
+      border: 1px solid rgba(183, 199, 207, 0.24);
+      background: rgba(255, 255, 255, 0.055);
+      color: rgba(236, 244, 248, 0.9);
+      padding: 8px 11px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .gesture-panel button:hover,
+    .gesture-panel button:focus-visible {
+      border-color: rgba(185, 120, 54, 0.72);
+      outline: none;
+    }
+
+    .gesture-panel button:disabled {
+      cursor: default;
+      opacity: 0.62;
+    }
+
+    #gestureVideo {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: none;
+      width: 132px;
+      height: 96px;
+      object-fit: cover;
+      transform: scaleX(-1);
+      opacity: 0.22;
+      border: 1px solid rgba(183, 199, 207, 0.18);
+      background: #000;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    #gestureVideo.visible {
+      display: block;
+    }
+
+    #gestureInput {
+      display: none;
+    }
+
+    #gestureOverlay {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: none;
+      width: 132px;
+      height: 96px;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    #gestureOverlay.visible {
+      display: block;
+    }
+
+    .gesture-guide {
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      top: 7px;
+      bottom: 7px;
+      border: 2px solid rgba(243, 193, 107, 0.88);
+      box-shadow: 0 0 22px rgba(243, 193, 107, 0.2), inset 0 0 28px rgba(243, 193, 107, 0.08);
+    }
+
+    .gesture-guide::before {
+      content: "";
+      position: absolute;
+      left: 16%;
+      right: 16%;
+      top: 12%;
+      height: 42%;
+      border-top: 1px dashed rgba(236, 244, 248, 0.62);
+      border-bottom: 1px dashed rgba(236, 244, 248, 0.24);
+    }
+
+    .gesture-guide::after {
+      content: attr(data-progress);
+      position: absolute;
+      left: 50%;
+      bottom: -24px;
+      transform: translateX(-50%);
+      color: rgba(236, 244, 248, 0.9);
+      font-size: 11px;
+      white-space: nowrap;
+      text-shadow: 0 1px 10px #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gl" tabindex="0"></canvas>
+  <canvas id="storyCanvas" aria-hidden="true"></canvas>
+  <canvas id="subtitleCanvas" aria-hidden="true"></canvas>
+  <audio id="storyMusic" src="assets/story/story-music.wav" preload="auto" loop></audio>
+  <video id="gestureVideo" playsinline muted></video>
+  <canvas id="gestureInput" width="96" height="72"></canvas>
+  <div id="gestureOverlay" aria-hidden="true">
+    <div id="gestureGuide" class="gesture-guide" data-progress="五指确认 0 / 4 秒"></div>
+  </div>
+  <section class="hud" aria-live="polite">
+    <h1>空间记忆粒子模型</h1>
+    <p class="status" id="status">正在读取新模型 <strong>assets/model.obj</strong> ...</p>
+    <p class="hint">加载后自动扫描显影；按 C 进入记忆沙盘，按空格切换分镜；拖拽旋转，滚轮缩放，双击重置。</p>
+  </section>
+  <section class="gesture-panel" aria-live="polite">
+    <button id="cameraButton" type="button">开启手势控制</button>
+    <span id="gestureStatus">摄像头未开启：张开五指后，靠近放大，远离缩小。</span>
+  </section>
+  <section class="fallback" id="fallback">
+    <p>浏览器没有允许自动读取本地 OBJ。请选择你的 <strong>模型最终.obj</strong>，页面会直接把它转换成粒子云。</p>
+    <input id="fileInput" type="file" accept=".obj,text/plain" />
+  </section>
+
+  <script>
+    const MODEL_URL = "assets/model.obj";
+    const MEMORY_MAP_URL = "assets/memory-map.png";
+    const MEDIAPIPE_HANDS_BASE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4";
+    const GESTURE_LOAD_TIMEOUT = 15000;
+    const DESKTOP_CAP = 190000;
+    const MOBILE_CAP = 95000;
+    const SURFACE_VERTEX_CAP = 78000;
+    const canvas = document.getElementById("gl");
+    const storyCanvas = document.getElementById("storyCanvas");
+    const storyContext = storyCanvas.getContext("2d");
+    const subtitleCanvas = document.getElementById("subtitleCanvas");
+    const subtitleContext = subtitleCanvas.getContext("2d", { willReadFrequently: true });
+    const storyMusic = document.getElementById("storyMusic");
+    const gestureVideo = document.getElementById("gestureVideo");
+    const gestureInput = document.getElementById("gestureInput");
+    const gestureContext = gestureInput.getContext("2d", { willReadFrequently: true });
+    const gestureOverlay = document.getElementById("gestureOverlay");
+    const gestureGuide = document.getElementById("gestureGuide");
+    const cameraButton = document.getElementById("cameraButton");
+    const gestureStatusEl = document.getElementById("gestureStatus");
+    const statusEl = document.getElementById("status");
+    const fallbackEl = document.getElementById("fallback");
+    const fileInput = document.getElementById("fileInput");
+
+    const gl = canvas.getContext("webgl", { antialias: false, alpha: false });
+    if (!gl) {
+      statusEl.textContent = "这个浏览器没有可用的 WebGL。";
+      throw new Error("WebGL unavailable");
+    }
+
+    const vertexShaderSource = `
+      attribute vec3 aPosition;
+      attribute vec3 aScatter;
+      attribute vec3 aColor;
+      attribute float aRelease;
+      attribute vec3 aStoryFromPosition;
+      attribute vec3 aStoryToPosition;
+      attribute vec3 aStoryFromColor;
+      attribute vec3 aStoryToColor;
+      uniform mat4 uMatrix;
+      uniform float uPixelRatio;
+      uniform float uScatterMix;
+      uniform float uPointScale;
+      uniform float uAlphaScale;
+      uniform float uScanProgress;
+      uniform float uStoryMode;
+      uniform float uStoryTransition;
+      uniform float uTime;
+      uniform vec2 uPointerLight;
+      uniform float uPointerLightActive;
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        float globalMix = clamp(uScatterMix, 0.0, 1.0);
+        float localMix = smoothstep(aRelease, min(1.0, aRelease + 0.36), globalMix);
+        vec3 scatterVector = aScatter - aPosition;
+        vec3 peelDirection = normalize(scatterVector + vec3(0.0001, 0.0003, 0.0002));
+        float breath = sin(uTime * 0.0017 + aRelease * 31.0) * 0.028;
+        breath *= smoothstep(0.02, 0.78, globalMix) * (1.0 - localMix * 0.35);
+        vec3 morphed = aPosition + scatterVector * localMix + peelDirection * breath;
+        float scanAxis = aPosition.y;
+        float scanHead = mix(-1.08, 1.08, clamp(uScanProgress, 0.0, 1.0));
+        float revealed = smoothstep(scanAxis - 0.06, scanAxis + 0.18, scanHead);
+        float scanBand = 1.0 - smoothstep(0.0, 0.075, abs(scanAxis - scanHead));
+        float preEcho = (1.0 - revealed) * scanBand * 0.24;
+        morphed += peelDirection * (1.0 - revealed) * 0.11;
+        vec3 storyPosition = mix(aStoryFromPosition, aStoryToPosition, clamp(uStoryTransition, 0.0, 1.0));
+        storyPosition.z += sin(uTime * 0.0014 + aRelease * 24.0) * 0.012;
+        vec3 finalPosition = mix(morphed, storyPosition, clamp(uStoryMode, 0.0, 1.0));
+        vec4 viewPosition = uMatrix * vec4(finalPosition, 1.0);
+        gl_Position = viewPosition;
+        float depthFade = clamp(1.72 - gl_Position.z * 0.42, 0.7, 1.9);
+        float coherentSize = mix(3.62, 1.52, localMix);
+        float storyPulse = 0.86 + sin(uTime * 0.002 + aRelease * 37.0) * 0.1;
+        float storySizeBoost = mix(1.0, 0.72, clamp(uStoryMode, 0.0, 1.0));
+        gl_PointSize = clamp(coherentSize * storySizeBoost * (0.72 + scanBand * 1.12 + uStoryMode * 0.06) * uPointScale * uPixelRatio * depthFade, 0.54, 9.5);
+        vec3 modelColor = mix(aColor, vec3(0.46, 0.86, 1.0), scanBand * 0.76);
+        vec3 storyColor = mix(aStoryFromColor, aStoryToColor, clamp(uStoryTransition, 0.0, 1.0));
+        vec2 pointerDelta = gl_Position.xy / max(0.001, gl_Position.w) - uPointerLight;
+        float pointerGlow = exp(-dot(pointerDelta, pointerDelta) * 28.0) * clamp(uPointerLightActive, 0.0, 1.0);
+        modelColor += vec3(0.95, 0.72, 0.42) * pointerGlow * 0.22;
+        storyColor += vec3(0.95, 0.7, 0.36) * pointerGlow * 0.28;
+        float modelAlpha = clamp((mix(0.88, 0.43, localMix) * uAlphaScale) * (revealed * 0.98 + scanBand * 0.88 + preEcho), 0.0, 1.0);
+        float storyAlpha = clamp((0.58 + uStoryTransition * 0.34) * storyPulse * uAlphaScale, 0.0, 1.0);
+        vColor = mix(modelColor, storyColor, clamp(uStoryMode, 0.0, 1.0));
+        vAlpha = mix(modelAlpha, storyAlpha, clamp(uStoryMode, 0.0, 1.0));
+      }
+    `;
+
+    const fragmentShaderSource = `
+      precision mediump float;
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        vec2 uv = gl_PointCoord - vec2(0.5);
+        float dist = length(uv);
+        if (dist > 0.5) discard;
+        float glow = smoothstep(0.5, 0.08, dist);
+        gl_FragColor = vec4(vColor, glow * vAlpha);
+      }
+    `;
+
+    const lineVertexShaderSource = `
+      attribute vec3 aLinePosition;
+      attribute vec3 aLineColor;
+      uniform mat4 uLineMatrix;
+      varying vec3 vLineColor;
+
+      void main() {
+        gl_Position = uLineMatrix * vec4(aLinePosition, 1.0);
+        vLineColor = aLineColor;
+      }
+    `;
+
+    const lineFragmentShaderSource = `
+      precision mediump float;
+      varying vec3 vLineColor;
+      uniform float uLineAlpha;
+
+      void main() {
+        gl_FragColor = vec4(vLineColor, uLineAlpha);
+      }
+    `;
+
+    const surfaceVertexShaderSource = `
+      attribute vec3 aSurfacePosition;
+      attribute vec3 aSurfaceColor;
+      uniform mat4 uSurfaceMatrix;
+      varying vec3 vSurfaceColor;
+
+      void main() {
+        gl_Position = uSurfaceMatrix * vec4(aSurfacePosition, 1.0);
+        vSurfaceColor = aSurfaceColor;
+      }
+    `;
+
+    const surfaceFragmentShaderSource = `
+      precision mediump float;
+      varying vec3 vSurfaceColor;
+      uniform float uSurfaceAlpha;
+
+      void main() {
+        gl_FragColor = vec4(vSurfaceColor, uSurfaceAlpha);
+      }
+    `;
+
+    const program = createProgram(vertexShaderSource, fragmentShaderSource);
+    const surfaceProgram = createProgram(surfaceVertexShaderSource, surfaceFragmentShaderSource);
+    const lineProgram = createProgram(lineVertexShaderSource, lineFragmentShaderSource);
+    const positionLocation = gl.getAttribLocation(program, "aPosition");
+    const scatterLocation = gl.getAttribLocation(program, "aScatter");
+    const colorLocation = gl.getAttribLocation(program, "aColor");
+    const releaseLocation = gl.getAttribLocation(program, "aRelease");
+    const storyFromPositionLocation = gl.getAttribLocation(program, "aStoryFromPosition");
+    const storyToPositionLocation = gl.getAttribLocation(program, "aStoryToPosition");
+    const storyFromColorLocation = gl.getAttribLocation(program, "aStoryFromColor");
+    const storyToColorLocation = gl.getAttribLocation(program, "aStoryToColor");
+    const matrixLocation = gl.getUniformLocation(program, "uMatrix");
+    const pixelRatioLocation = gl.getUniformLocation(program, "uPixelRatio");
+    const scatterMixLocation = gl.getUniformLocation(program, "uScatterMix");
+    const pointScaleLocation = gl.getUniformLocation(program, "uPointScale");
+    const alphaScaleLocation = gl.getUniformLocation(program, "uAlphaScale");
+    const scanProgressLocation = gl.getUniformLocation(program, "uScanProgress");
+    const storyModeLocation = gl.getUniformLocation(program, "uStoryMode");
+    const storyTransitionLocation = gl.getUniformLocation(program, "uStoryTransition");
+    const timeLocation = gl.getUniformLocation(program, "uTime");
+    const pointerLightLocation = gl.getUniformLocation(program, "uPointerLight");
+    const pointerLightActiveLocation = gl.getUniformLocation(program, "uPointerLightActive");
+    const surfacePositionLocation = gl.getAttribLocation(surfaceProgram, "aSurfacePosition");
+    const surfaceColorLocation = gl.getAttribLocation(surfaceProgram, "aSurfaceColor");
+    const surfaceMatrixLocation = gl.getUniformLocation(surfaceProgram, "uSurfaceMatrix");
+    const surfaceAlphaLocation = gl.getUniformLocation(surfaceProgram, "uSurfaceAlpha");
+    const linePositionLocation = gl.getAttribLocation(lineProgram, "aLinePosition");
+    const lineColorLocation = gl.getAttribLocation(lineProgram, "aLineColor");
+    const lineMatrixLocation = gl.getUniformLocation(lineProgram, "uLineMatrix");
+    const lineAlphaLocation = gl.getUniformLocation(lineProgram, "uLineAlpha");
+    const positionBuffer = gl.createBuffer();
+    const scatterBuffer = gl.createBuffer();
+    const colorBuffer = gl.createBuffer();
+    const releaseBuffer = gl.createBuffer();
+    const storyFromPositionBuffer = gl.createBuffer();
+    const storyToPositionBuffer = gl.createBuffer();
+    const storyFromColorBuffer = gl.createBuffer();
+    const storyToColorBuffer = gl.createBuffer();
+    const surfacePositionBuffer = gl.createBuffer();
+    const surfaceColorBuffer = gl.createBuffer();
+    const roomLinePositionBuffer = gl.createBuffer();
+    const roomLineColorBuffer = gl.createBuffer();
+    const lightLinePositionBuffer = gl.createBuffer();
+    const lightLineColorBuffer = gl.createBuffer();
+    const scanLinePositionBuffer = gl.createBuffer();
+    const scanLineColorBuffer = gl.createBuffer();
+    const memoryLinePositionBuffer = gl.createBuffer();
+    const memoryLineColorBuffer = gl.createBuffer();
+
+    let pointCount = 0;
+    let surfaceVertexCount = 0;
+    let roomLineVertexCount = 0;
+    let lightLineVertexCount = 0;
+    let scanLineVertexCount = 0;
+    let memoryLineVertexCount = 0;
+    let rotationX = -0.28;
+    let rotationY = 0.34;
+    let targetRotationX = rotationX;
+    let targetRotationY = rotationY;
+    let zoom = 1.12;
+    let targetZoom = zoom;
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    let autoRotate = true;
+    let cameraDistance = 4.15;
+    let targetCameraDistance = cameraDistance;
+    let gestureEnabled = false;
+    let gestureStream = null;
+    let mediaPipeHands = null;
+    let mediaPipeHandsLoading = null;
+    let mediaPipeHandsBusy = false;
+    let mediaPipeHandsResult = null;
+    let mediaPipeReady = false;
+    let gestureLastVideoTime = -1;
+    let gestureLastDetectedHand = null;
+    let mediaPipeResultTime = 0;
+    let mediaPipeSendTime = 0;
+    let mediaPipeConsumedTime = 0;
+    let gestureLastArea = 0;
+    let gestureSmoothedArea = 0;
+    let gestureAreaVelocity = 0;
+    let gestureSmoothedX = 0;
+    let gestureXVelocity = 0;
+    let gestureFiveHold = 0;
+    let gestureConfirmStart = 0;
+    let gestureCalibrated = false;
+    let gestureDistanceScatter = 0;
+    let gestureStillFrames = 0;
+    let gestureLostFrames = 0;
+    let gestureFrameCounter = 0;
+    let gestureDebugMessage = "";
+    let scanStartTime = 0;
+    let scanProgress = 1;
+    let storyMode = 0;
+    let targetStoryMode = 0;
+    let storyTransition = 1;
+    let storyTransitionStart = 0;
+    let storySceneIndex = -1;
+    let storySwitching = false;
+    let currentStoryFrame = null;
+    let memoryMapActive = false;
+    let memoryMapFrame = null;
+    let memoryMapPrintFrame = null;
+    let memoryMapImageData = null;
+    let memoryMapRevealStart = 0;
+    let pointerLightX = 0;
+    let pointerLightY = 0;
+    let pointerLightActive = 0;
+    let pointerMoved = false;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+    const SCAN_DURATION = 7600;
+    const STORY_TRANSITION_DURATION = 2100;
+    const SCAN_AXIS_MIN = -1.08;
+    const SCAN_AXIS_MAX = 1.08;
+    const storyScenes = [
+      { title: "01 废墟 / 拾得", description: "鸽子与信落入废墟，人弯腰拾得。", caption: "废墟中，一封未抵达的信被重新看见。", image: "assets/story/story-01.png" },
+      { title: "02 整理 / 写成故事", description: "人在房间桌前整理资料，把它写成故事。", caption: "他在旧资料与灯光之间，把散落的记忆整理成故事。", image: "assets/story/story-02.png" },
+      { title: "03 传递 / 送回", description: "人将信封送回至收信人手中。", caption: "信被递回手中，迟到的内容终于抵达另一个人。", image: "assets/story/story-03.png" },
+      { title: "04 安放 / 玻璃柜", description: "最后没送到的信被放进玻璃柜中展览。", caption: "未能送达的信被安放进玻璃柜，成为被保存的证词。", image: "assets/story/story-04.png" },
+      { title: "05 观看 / 阅读", description: "后人在玻璃柜外欣赏、阅读。", caption: "后来的人停在柜前阅读，让沉默的故事再次被听见。", image: "assets/story/story-05.png" }
+    ];
+    const storyImageCache = new Map();
+    const storyLineScenes = buildStoryLineScenes();
+    let subtitleParticles = [];
+    let subtitleStartTime = 0;
+    let musicContext = null;
+    let musicMasterGain = null;
+    let musicFilter = null;
+    let musicStarted = false;
+    let musicPulseTimer = null;
+    let musicGrainTimer = null;
+
+    initEvents();
+    resize();
+    window.addEventListener("resize", resize);
+    preloadStoryImages();
+    preloadMemoryMapImage();
+
+    fetch(MODEL_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("自动读取失败");
+        return response.text();
+      })
+      .then((text) => loadObjText(text, "assets/model.obj"))
+      .catch(() => {
+        statusEl.innerHTML = "自动读取被浏览器拦截，请手动选择 <strong>模型最终.obj</strong>。";
+        fallbackEl.classList.add("visible");
+      });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => loadObjText(String(reader.result || ""), file.name);
+      reader.readAsText(file);
+    });
+
+    function loadObjText(text, label) {
+      statusEl.innerHTML = `正在解析 <strong>${escapeHtml(label)}</strong> ...`;
+      fallbackEl.classList.remove("visible");
+
+      setTimeout(() => {
+        const parsed = parseObjModel(text);
+        if (!parsed.vertices.length) {
+          statusEl.textContent = "OBJ 里没有读到顶点。";
+          fallbackEl.classList.add("visible");
+          return;
+        }
+
+        const cap = isSmallScreen() ? MOBILE_CAP : DESKTOP_CAP;
+        const sampled = buildSurfaceParticles(parsed, cap);
+        const normalizer = createNormalizer(parsed.vertices);
+        const normalized = { positions: applyNormalizer(sampled.positions, normalizer) };
+        const surface = buildSurfaceMesh(parsed, normalizer);
+        const scatter = buildScatterPositions(normalized.positions);
+        const releases = buildReleaseMap(normalized.positions);
+        const colors = buildColors(normalized.positions);
+        const initialStoryFrame = buildStoryFrame(0, normalized.positions.length / 3);
+        const surfaceColors = buildColors(surface.positions, 0.52);
+        const narrative = buildNarrativeStructure();
+        const lightBeams = buildReferenceLightBeams();
+
+        pointCount = normalized.positions.length / 3;
+        surfaceVertexCount = surface.positions.length / 3;
+        roomLineVertexCount = narrative.rooms.positions.length / 3;
+        lightLineVertexCount = lightBeams.positions.length / 3;
+        bindFloatBuffer(positionBuffer, positionLocation, normalized.positions, 3);
+        bindFloatBuffer(scatterBuffer, scatterLocation, scatter, 3);
+        bindFloatBuffer(colorBuffer, colorLocation, colors, 3);
+        bindFloatBuffer(releaseBuffer, releaseLocation, releases, 1);
+        bindFloatBuffer(storyFromPositionBuffer, storyFromPositionLocation, initialStoryFrame.positions, 3);
+        bindFloatBuffer(storyToPositionBuffer, storyToPositionLocation, initialStoryFrame.positions, 3);
+        bindFloatBuffer(storyFromColorBuffer, storyFromColorLocation, initialStoryFrame.colors, 3);
+        bindFloatBuffer(storyToColorBuffer, storyToColorLocation, initialStoryFrame.colors, 3);
+        bindFloatBuffer(surfacePositionBuffer, surfacePositionLocation, surface.positions, 3);
+        bindFloatBuffer(surfaceColorBuffer, surfaceColorLocation, surfaceColors, 3);
+        bindFloatBuffer(roomLinePositionBuffer, linePositionLocation, narrative.rooms.positions, 3);
+        bindFloatBuffer(roomLineColorBuffer, lineColorLocation, narrative.rooms.colors, 3);
+        bindFloatBuffer(lightLinePositionBuffer, linePositionLocation, lightBeams.positions, 3);
+        bindFloatBuffer(lightLineColorBuffer, lineColorLocation, lightBeams.colors, 3);
+
+        const sampleNote = sampled.skipped
+          ? `，已按面片布点并限制到 ${pointCount.toLocaleString()} 个`
+          : "";
+        currentStoryFrame = initialStoryFrame;
+        memoryMapFrame = null;
+        memoryMapPrintFrame = null;
+        memoryLineVertexCount = 0;
+        memoryMapActive = false;
+        storySceneIndex = -1;
+        storyMode = 0;
+        targetStoryMode = 0;
+        storyTransition = 1;
+        statusEl.innerHTML = `已生成 <strong>${pointCount.toLocaleString()}</strong> 个表面粒子与 ${surfaceVertexCount.toLocaleString()} 个布面顶点${sampleNote}。扫描结束后按 C 进入记忆沙盘，按空格进入分镜。`;
+        startScanReveal();
+        requestAnimationFrame(draw);
+      }, 30);
+    }
+
+    function startScanReveal() {
+      scanStartTime = performance.now();
+      scanProgress = 0;
+      storySceneIndex = -1;
+      memoryMapActive = false;
+      memoryMapRevealStart = 0;
+      targetStoryMode = 0;
+      storyMode = 0;
+    }
+
+    async function enterMemoryMap() {
+      if (storySwitching || !pointCount) return;
+      storySwitching = true;
+      try {
+        if (scanProgress < 0.98) {
+          scanProgress = 1;
+          scanStartTime = 0;
+        }
+        if (!memoryMapImageData) {
+          statusEl.innerHTML = "<strong>空间记忆沙盘</strong>：正在读取记忆地图底图...";
+          await loadMemoryMapImage().catch(() => null);
+        }
+        if (!memoryMapFrame) memoryMapFrame = buildMemoryMapFrame(pointCount);
+        if (!memoryMapPrintFrame) memoryMapPrintFrame = buildMemoryMapPrintFrame(memoryMapFrame);
+        const memoryLines = buildMemoryMapLines();
+        bindFloatBuffer(storyFromPositionBuffer, storyFromPositionLocation, memoryMapPrintFrame.positions, 3);
+        bindFloatBuffer(storyFromColorBuffer, storyFromColorLocation, memoryMapPrintFrame.colors, 3);
+        bindFloatBuffer(storyToPositionBuffer, storyToPositionLocation, memoryMapFrame.positions, 3);
+        bindFloatBuffer(storyToColorBuffer, storyToColorLocation, memoryMapFrame.colors, 3);
+        bindFloatBuffer(memoryLinePositionBuffer, linePositionLocation, memoryLines.positions, 3);
+        bindFloatBuffer(memoryLineColorBuffer, lineColorLocation, memoryLines.colors, 3);
+        memoryLineVertexCount = memoryLines.positions.length / 3;
+        currentStoryFrame = memoryMapFrame;
+        storySceneIndex = -1;
+        memoryMapActive = true;
+        memoryMapRevealStart = performance.now();
+        storyTransitionStart = performance.now();
+        storyTransition = 0;
+        targetStoryMode = 1;
+        autoRotate = true;
+        targetRotationX = -1.06;
+        targetRotationY = 0.16;
+        targetZoom = 1.18;
+        targetCameraDistance = 3.08;
+        subtitleParticles = [];
+        statusEl.innerHTML = "<strong>空间记忆沙盘</strong>：多组微型打印点从上方投射细光束，逐层显影出记忆地形与内部铜线。按空格进入分镜，双击返回首页。";
+      } catch (error) {
+        memoryMapActive = false;
+        memoryMapRevealStart = 0;
+        targetStoryMode = 0;
+        statusEl.innerHTML = "记忆沙盘生成失败，已自动回到稳定首页。";
+      } finally {
+        window.setTimeout(() => {
+          storySwitching = false;
+        }, 260);
+      }
+    }
+
+    async function advanceStoryScene() {
+      if (storySwitching) return;
+      if (!pointCount) return;
+      storySwitching = true;
+      try {
+        if (storySceneIndex < 0 && scanProgress < 0.98) {
+          scanProgress = 1;
+          scanStartTime = 0;
+        }
+        startStoryMusic();
+        const nextIndex = storySceneIndex < 0 ? 0 : (storySceneIndex + 1) % storyScenes.length;
+        await loadStoryImage(storyScenes[nextIndex].image).catch(() => null);
+        const nextFrame = buildStoryFrame(nextIndex, pointCount);
+        const fromFrame = currentStoryFrame || nextFrame;
+        bindFloatBuffer(storyFromPositionBuffer, storyFromPositionLocation, fromFrame.positions, 3);
+        bindFloatBuffer(storyFromColorBuffer, storyFromColorLocation, fromFrame.colors, 3);
+        bindFloatBuffer(storyToPositionBuffer, storyToPositionLocation, nextFrame.positions, 3);
+        bindFloatBuffer(storyToColorBuffer, storyToColorLocation, nextFrame.colors, 3);
+        currentStoryFrame = nextFrame;
+        memoryMapActive = false;
+        memoryMapRevealStart = 0;
+        storySceneIndex = nextIndex;
+        storyTransitionStart = performance.now();
+        storyTransition = 0;
+        targetStoryMode = 1;
+        autoRotate = false;
+        targetRotationX = 0;
+        targetRotationY = 0;
+        targetZoom = 1.38;
+        targetCameraDistance = 3.08;
+        const scene = storyScenes[storySceneIndex];
+        rebuildSubtitleParticles(scene.caption);
+        statusEl.innerHTML = `<strong>${scene.title}</strong>：${scene.description} 按空格或轻点画面进入下一幕。`;
+      } finally {
+        window.setTimeout(() => {
+          storySwitching = false;
+        }, 220);
+      }
+    }
+
+    function startStoryMusic() {
+      if (musicStarted) return;
+      if (storyMusic) {
+        musicStarted = true;
+        storyMusic.volume = 0.02;
+        storyMusic.loop = true;
+        window.__storyMusicStatus = () => ({
+          started: musicStarted,
+          mode: "audio-file",
+          paused: storyMusic.paused,
+          volume: storyMusic.volume,
+          currentTime: storyMusic.currentTime
+        });
+        const playResult = storyMusic.play();
+        if (playResult && typeof playResult.then === "function") {
+          playResult.then(() => {
+            fadeStoryMusicVolume(0.42, 6200);
+          }).catch(() => {
+            musicStarted = false;
+            window.__storyMusicStatus = () => ({
+              started: false,
+              mode: "blocked",
+              paused: storyMusic.paused,
+              volume: storyMusic.volume,
+              currentTime: storyMusic.currentTime
+            });
+          });
+        } else {
+          fadeStoryMusicVolume(0.42, 6200);
+        }
+        return;
+      }
+      startSynthStoryMusic();
+    }
+
+    function startSynthStoryMusic() {
+      if (musicStarted) return;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        window.__storyMusicStatus = () => ({ started: false, mode: "unavailable" });
+        return;
+      }
+      if (!musicContext) {
+        musicContext = new AudioContextClass();
+      }
+      if (musicContext.state === "suspended") {
+        musicContext.resume().catch(() => {});
+      }
+
+      musicStarted = true;
+      const now = musicContext.currentTime;
+      musicMasterGain = musicContext.createGain();
+      musicMasterGain.gain.setValueAtTime(0.0001, now);
+      musicMasterGain.gain.exponentialRampToValueAtTime(0.115, now + 6.2);
+
+      musicFilter = musicContext.createBiquadFilter();
+      musicFilter.type = "lowpass";
+      musicFilter.frequency.setValueAtTime(920, now);
+      musicFilter.Q.setValueAtTime(0.7, now);
+      musicFilter.connect(musicMasterGain);
+      musicMasterGain.connect(musicContext.destination);
+
+      startDroneVoice(65.41, 0.26, -0.28);
+      startDroneVoice(98.0, 0.18, 0.24);
+      startDroneVoice(130.81, 0.1, 0.04);
+      scheduleMusicPulse();
+      scheduleMusicGrain();
+      window.__storyMusicStatus = () => ({
+        started: musicStarted,
+        mode: "synth",
+        state: musicContext && musicContext.state,
+        gain: musicMasterGain && musicMasterGain.gain.value
+      });
+    }
+
+    function fadeStoryMusicVolume(target, durationMs) {
+      const start = performance.now();
+      const initial = storyMusic.volume;
+      const tick = () => {
+        if (!musicStarted || !storyMusic) return;
+        const progress = clamp((performance.now() - start) / durationMs, 0, 1);
+        const eased = progress * progress * (3 - 2 * progress);
+        storyMusic.volume = mix(initial, target, eased);
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    function startDroneVoice(frequency, gainValue, panValue) {
+      const now = musicContext.currentTime;
+      const oscillator = musicContext.createOscillator();
+      const gain = musicContext.createGain();
+      const pan = musicContext.createStereoPanner ? musicContext.createStereoPanner() : null;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, now);
+      oscillator.frequency.linearRampToValueAtTime(frequency * 1.006, now + 8);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(gainValue, now + 4.8);
+      if (pan) {
+        pan.pan.setValueAtTime(panValue, now);
+        oscillator.connect(gain);
+        gain.connect(pan);
+        pan.connect(musicFilter);
+      } else {
+        oscillator.connect(gain);
+        gain.connect(musicFilter);
+      }
+      oscillator.start(now);
+    }
+
+    function scheduleMusicPulse() {
+      if (!musicContext || !musicStarted) return;
+      const scale = [196, 246.94, 293.66, 329.63, 392, 493.88];
+      let pulseIndex = 0;
+      const playPulse = () => {
+        if (!musicContext || !musicStarted) return;
+        const now = musicContext.currentTime;
+        const base = scale[pulseIndex % scale.length];
+        const notes = [base, base * 1.5, base * 2];
+        notes.forEach((frequency, index) => {
+          const oscillator = musicContext.createOscillator();
+          const gain = musicContext.createGain();
+          const pan = musicContext.createStereoPanner ? musicContext.createStereoPanner() : null;
+          oscillator.type = index === 0 ? "triangle" : "sine";
+          oscillator.frequency.setValueAtTime(frequency, now);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.exponentialRampToValueAtTime(0.026 / (index + 1), now + 0.18);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 4.4 + index * 0.55);
+          if (pan) {
+            pan.pan.setValueAtTime((index - 1) * 0.24, now);
+            oscillator.connect(gain);
+            gain.connect(pan);
+            pan.connect(musicFilter);
+          } else {
+            oscillator.connect(gain);
+            gain.connect(musicFilter);
+          }
+          oscillator.start(now);
+          oscillator.stop(now + 5.2 + index * 0.55);
+        });
+        pulseIndex++;
+        musicPulseTimer = window.setTimeout(playPulse, 6200 + seededRandom(pulseIndex * 31) * 1800);
+      };
+      playPulse();
+    }
+
+    function scheduleMusicGrain() {
+      if (!musicContext || !musicStarted) return;
+      let grainIndex = 0;
+      const playGrain = () => {
+        if (!musicContext || !musicStarted) return;
+        const now = musicContext.currentTime;
+        const oscillator = musicContext.createOscillator();
+        const gain = musicContext.createGain();
+        const pan = musicContext.createStereoPanner ? musicContext.createStereoPanner() : null;
+        const frequencies = [523.25, 587.33, 659.25, 783.99, 880];
+        const frequency = frequencies[grainIndex % frequencies.length] * (0.995 + seededRandom(grainIndex * 17) * 0.02);
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.035, now + 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+        if (pan) {
+          pan.pan.setValueAtTime(seededRandom(grainIndex * 19) * 1.2 - 0.6, now);
+          oscillator.connect(gain);
+          gain.connect(pan);
+          pan.connect(musicFilter);
+        } else {
+          oscillator.connect(gain);
+          gain.connect(musicFilter);
+        }
+        oscillator.start(now);
+        oscillator.stop(now + 1.55);
+        grainIndex++;
+        musicGrainTimer = window.setTimeout(playGrain, 1200 + seededRandom(grainIndex * 23) * 2400);
+      };
+      musicGrainTimer = window.setTimeout(playGrain, 1800);
+    }
+
+    function stopStoryMusic() {
+      if (storyMusic && musicStarted) {
+        musicStarted = false;
+        const start = performance.now();
+        const initial = storyMusic.volume;
+        const fadeOut = () => {
+          const progress = clamp((performance.now() - start) / 1600, 0, 1);
+          storyMusic.volume = mix(initial, 0, progress);
+          if (progress < 1) {
+            requestAnimationFrame(fadeOut);
+          } else {
+            storyMusic.pause();
+            storyMusic.currentTime = 0;
+            storyMusic.volume = 0.02;
+          }
+        };
+        requestAnimationFrame(fadeOut);
+        window.__storyMusicStatus = () => ({
+          started: musicStarted,
+          mode: "audio-file",
+          paused: storyMusic.paused,
+          volume: storyMusic.volume,
+          currentTime: storyMusic.currentTime
+        });
+        return;
+      }
+      if (!musicStarted || !musicContext || !musicMasterGain) return;
+      musicStarted = false;
+      window.clearTimeout(musicPulseTimer);
+      window.clearTimeout(musicGrainTimer);
+      const now = musicContext.currentTime;
+      musicMasterGain.gain.cancelScheduledValues(now);
+      musicMasterGain.gain.setValueAtTime(Math.max(0.0001, musicMasterGain.gain.value || 0.0001), now);
+      musicMasterGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+      window.__storyMusicStatus = () => ({
+        started: musicStarted,
+        mode: "synth",
+        state: musicContext && musicContext.state,
+        gain: musicMasterGain && musicMasterGain.gain.value
+      });
+    }
+
+    function parseObjModel(text) {
+      const vertices = [];
+      const faces = [];
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (line.charCodeAt(0) === 118 && line[1] === " ") {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 4) continue;
+        const x = Number(parts[1]);
+        const y = Number(parts[2]);
+        const z = Number(parts[3]);
+        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+            vertices.push(x, y, z);
+          }
+          continue;
+        }
+        if (line.charCodeAt(0) === 102 && line[1] === " ") {
+          const parts = line.split(/\s+/).slice(1);
+          const indices = [];
+          for (const part of parts) {
+            const raw = part.split("/")[0];
+            const index = Number(raw);
+            if (Number.isFinite(index)) {
+              indices.push(index < 0 ? vertices.length / 3 + index : index - 1);
+            }
+          }
+          for (let j = 1; j < indices.length - 1; j++) {
+            faces.push(indices[0], indices[j], indices[j + 1]);
+          }
+        }
+      }
+      return { vertices, faces };
+    }
+
+    function buildSurfaceParticles(model, cap) {
+      if (!model.faces.length) {
+        const positions = new Float32Array(model.vertices);
+        return { positions, skipped: positions.length / 3 > cap };
+      }
+
+      const vertices = model.vertices;
+      const faces = model.faces;
+      const areas = new Float32Array(faces.length / 3);
+      let totalArea = 0;
+
+      for (let i = 0, face = 0; i < faces.length; i += 3, face++) {
+        const a = faces[i] * 3;
+        const b = faces[i + 1] * 3;
+        const c = faces[i + 2] * 3;
+        const area = triangleArea(
+          vertices[a], vertices[a + 1], vertices[a + 2],
+          vertices[b], vertices[b + 1], vertices[b + 2],
+          vertices[c], vertices[c + 1], vertices[c + 2]
+        );
+        areas[face] = area;
+        totalArea += area;
+      }
+
+      const target = Math.min(cap, Math.max(42000, Math.floor(model.vertices.length * 0.55)));
+      const result = [];
+      const density = target / Math.max(totalArea, 1);
+
+      for (let i = 0, face = 0; i < faces.length; i += 3, face++) {
+        const a = faces[i] * 3;
+        const b = faces[i + 1] * 3;
+        const c = faces[i + 2] * 3;
+        const expected = areas[face] * density;
+        let count = Math.floor(expected);
+        if (seededRandom(face * 17 + 3) < expected - count) count++;
+        count = Math.min(count, 8);
+
+        for (let p = 0; p < count; p++) {
+          const seed = face * 97 + p * 23;
+          const point = pointOnTriangle(vertices, a, b, c, seed);
+          result.push(point[0], point[1], point[2]);
+        }
+
+        if (count === 0 && seededRandom(face * 41 + 9) < 0.18) {
+          const point = pointOnTriangle(vertices, a, b, c, face * 71);
+          result.push(point[0], point[1], point[2]);
+        }
+
+        if (face % 28 === 0) {
+          result.push(vertices[a], vertices[a + 1], vertices[a + 2]);
+        }
+      }
+
+      if (result.length / 3 > cap) {
+        return { positions: decimate(result, cap), skipped: true };
+      }
+      return { positions: new Float32Array(result), skipped: result.length / 3 >= cap };
+    }
+
+    function createNormalizer(values) {
+      const min = [Infinity, Infinity, Infinity];
+      const max = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < values.length; i += 3) {
+        for (let axis = 0; axis < 3; axis++) {
+          const value = values[i + axis];
+          if (value < min[axis]) min[axis] = value;
+          if (value > max[axis]) max[axis] = value;
+        }
+      }
+
+      const center = [
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5
+      ];
+      const size = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
+      const scale = 2.15 / size;
+      return { center, scale };
+    }
+
+    function applyNormalizer(values, normalizer) {
+      const normalized = new Float32Array(values.length);
+
+      for (let i = 0; i < values.length; i += 3) {
+        normalized[i] = (values[i] - normalizer.center[0]) * normalizer.scale;
+        normalized[i + 1] = (values[i + 1] - normalizer.center[1]) * normalizer.scale;
+        normalized[i + 2] = (values[i + 2] - normalizer.center[2]) * normalizer.scale;
+      }
+
+      return normalized;
+    }
+
+    function buildSurfaceMesh(model, normalizer) {
+      const faces = model.faces;
+      const vertices = model.vertices;
+      const faceCount = faces.length / 3;
+      const stride = Math.max(2, Math.ceil((faceCount * 3) / SURFACE_VERTEX_CAP));
+      const positions = [];
+
+      for (let i = 0, face = 0; i < faces.length; i += 3, face++) {
+        if (face % stride !== 0) continue;
+        for (let j = 0; j < 3; j++) {
+          const source = faces[i + j] * 3;
+          positions.push(vertices[source], vertices[source + 1], vertices[source + 2]);
+        }
+      }
+
+      return { positions: applyNormalizer(new Float32Array(positions), normalizer) };
+    }
+
+    function buildScatterPositions(positions) {
+      const scatter = new Float32Array(positions.length);
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        const seed = i / 3;
+        const wideX = x * 1.36;
+        const tallY = y * 1.08;
+        const deepZ = z * 1.95;
+        const shell = clamp(Math.sqrt(wideX * wideX + tallY * tallY + deepZ * deepZ) / 1.68, 0, 1);
+        const height = clamp((y + 1.08) / 2.16, 0, 1);
+        const sideBias = Math.sin(x * 5.4 + z * 3.7 + y * 2.1) * 0.5 + 0.5;
+        const radial = 0.42 + shell * 1.12 + seededRandom(seed * 11 + 1) * 0.54;
+        const direction = normalize3(
+          wideX + (seededRandom(seed * 13 + 2) - 0.5) * 0.72,
+          tallY + (seededRandom(seed * 17 + 3) - 0.5) * 0.72,
+          deepZ + (seededRandom(seed * 19 + 4) - 0.5) * 0.72
+        );
+        const tangent = normalize3(-z, 0.06 + sideBias * 0.12, x);
+        const drift = (sideBias - 0.5) * (0.05 + shell * 0.15);
+        const verticalLift = (height - 0.5) * 0.12 + (seededRandom(seed * 29 + 5) - 0.5) * 0.22;
+        scatter[i] = x + direction[0] * radial + tangent[0] * drift;
+        scatter[i + 1] = y + direction[1] * radial + tangent[1] * drift + verticalLift;
+        scatter[i + 2] = z + direction[2] * radial + tangent[2] * drift;
+      }
+      return scatter;
+    }
+
+    function buildReleaseMap(positions) {
+      const releases = new Float32Array(positions.length / 3);
+      for (let i = 0, point = 0; i < positions.length; i += 3, point++) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        const shell = clamp(Math.sqrt(x * x + y * y + z * z) / 1.32, 0, 1);
+        const edge = clamp(Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) / 1.08, 0, 1);
+        const upperDust = smoothstep(-0.08, 0.9, y) * 0.12;
+        const surfaceFirst = Math.max(shell, edge);
+        const jitter = seededRandom(point * 37 + 11) * 0.16;
+        const layerNoise = (Math.sin(x * 9.0 + y * 6.0 + z * 7.0) * 0.5 + 0.5) * 0.08;
+        releases[point] = clamp(0.04 + (1 - surfaceFirst) * 0.54 - upperDust + jitter + layerNoise, 0.025, 0.76);
+      }
+      return releases;
+    }
+
+    function buildNarrativeStructure() {
+      const roomPositions = [];
+      const roomColors = [];
+
+      const roomColor = [0.12, 0.18, 0.2];
+      const coldRoomColor = [0.1, 0.2, 0.25];
+      const warmRoomColor = [0.22, 0.18, 0.12];
+
+      const rooms = [
+        { center: [-0.62, 0.34, -0.56], size: [0.5, 0.32, 0.1], color: coldRoomColor },
+        { center: [-0.44, -0.42, -0.46], size: [0.58, 0.36, 0.1], color: roomColor },
+        { center: [0.1, 0.08, -0.22], size: [0.52, 0.36, 0.1], color: warmRoomColor },
+        { center: [0.56, -0.32, 0.02], size: [0.42, 0.4, 0.1], color: roomColor }
+      ];
+
+      rooms.forEach((room, index) => {
+        addBoxFrame(roomPositions, roomColors, room.center, room.size, room.color, index === 2 ? 0.36 : 0.22);
+      });
+
+      return {
+        rooms: {
+          positions: new Float32Array(roomPositions),
+          colors: new Float32Array(roomColors)
+        }
+      };
+    }
+
+    function addBoxFrame(positions, colors, center, size, color, alpha = 1) {
+      const [sx, sy, sz] = size.map((value) => value * 0.5);
+      const corners = [
+        [-sx, -sy, -sz], [sx, -sy, -sz], [sx, sy, -sz], [-sx, sy, -sz],
+        [-sx, -sy, sz], [sx, -sy, sz], [sx, sy, sz], [-sx, sy, sz]
+      ].map(([x, y, z]) => [center[0] + x, center[1] + y, center[2] + z]);
+      const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      for (const [a, b] of edges) {
+        addLine(positions, colors, corners[a], corners[b], color, 1, alpha);
+      }
+      addLine(positions, colors, corners[0], corners[6], color, 1, alpha * 0.18);
+      addLine(positions, colors, corners[3], corners[5], color, 1, alpha * 0.14);
+    }
+
+    function addLine(positions, colors, a, b, color, width = 1, alpha = 1) {
+      positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+      colors.push(color[0] * alpha, color[1] * alpha, color[2] * alpha, color[0] * alpha, color[1] * alpha, color[2] * alpha);
+    }
+
+    function updateScanGrid() {
+      const positions = [];
+      const colors = [];
+      const head = mix(SCAN_AXIS_MIN, SCAN_AXIS_MAX, scanProgress);
+      const color = [0.42, 0.86, 1.0];
+      addScanRing(positions, colors, head, 1.28, 0.72, color, 0.88);
+      addScanRing(positions, colors, head + 0.045, 1.18, 0.66, color, 0.34);
+      addScanRing(positions, colors, head - 0.045, 1.18, 0.66, color, 0.26);
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const inner = [Math.cos(angle) * 0.98, head, Math.sin(angle) * 0.54];
+        const outer = [Math.cos(angle) * 1.32, head, Math.sin(angle) * 0.74];
+        addLine(positions, colors, inner, outer, color, 1, 0.16);
+      }
+      scanLineVertexCount = positions.length / 3;
+      bindFloatBuffer(scanLinePositionBuffer, linePositionLocation, new Float32Array(positions), 3, gl.DYNAMIC_DRAW);
+      bindFloatBuffer(scanLineColorBuffer, lineColorLocation, new Float32Array(colors), 3, gl.DYNAMIC_DRAW);
+    }
+
+    function addScanRing(positions, colors, y, radiusX, radiusZ, color, alpha) {
+      const segments = 72;
+      for (let i = 0; i < segments; i++) {
+        const a = (Math.PI * 2 * i) / segments;
+        const b = (Math.PI * 2 * (i + 1)) / segments;
+        const pulse = 0.72 + Math.sin(a * 4 + scanProgress * Math.PI * 10) * 0.16;
+        addLine(
+          positions,
+          colors,
+          [Math.cos(a) * radiusX, y, Math.sin(a) * radiusZ],
+          [Math.cos(b) * radiusX, y, Math.sin(b) * radiusZ],
+          color,
+          1,
+          alpha * pulse
+        );
+      }
+    }
+
+    function buildStoryFrame(sceneIndex, count) {
+      const scene = storyScenes[clamp(sceneIndex, 0, storyScenes.length - 1)];
+      const imageData = storyImageCache.get(scene.image);
+      if (imageData) return buildImageStoryFrame(imageData, count);
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const p = storyPoint("fallback", i, count);
+        const c = storyColor("paper", i, p);
+        positions[i * 3] = p[0];
+        positions[i * 3 + 1] = p[1];
+        positions[i * 3 + 2] = p[2];
+        colors[i * 3] = c[0];
+        colors[i * 3 + 1] = c[1];
+        colors[i * 3 + 2] = c[2];
+      }
+      return { positions, colors };
+    }
+
+    function buildImageStoryFrame(imageData, count) {
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const candidates = imageData.points;
+      const candidateCount = candidates.length / 6;
+      const viewWidth = 2.38;
+      const viewHeight = 1.34;
+      for (let i = 0; i < count; i++) {
+        const source = Math.floor(seededRandom(i * 97 + 13) * candidateCount) * 6;
+        const px = candidates[source];
+        const py = candidates[source + 1];
+        const r = candidates[source + 2];
+        const g = candidates[source + 3];
+        const b = candidates[source + 4];
+        const light = candidates[source + 5];
+        const jitter = (0.003 + (1 - light) * 0.009);
+        const x = (px - 0.5) * viewWidth + (seededRandom(i * 17 + 1) - 0.5) * jitter;
+        const y = (0.5 - py) * viewHeight + (seededRandom(i * 19 + 2) - 0.5) * jitter;
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = (seededRandom(i * 23 + 3) - 0.5) * 0.065;
+        const glow = Math.pow(light, 1.24);
+        const warmSignal = clamp((r * 1.18 + g * 0.58 - b * 0.92 - 0.13) * 2.7, 0, 1) * smoothstep(0.08, 0.66, light);
+        const coolSignal = 1 - warmSignal;
+        const coldR = 0.22 + glow * 0.4;
+        const coldG = 0.38 + glow * 0.38;
+        const coldB = 0.44 + glow * 0.34;
+        const warmR = 1.0 + glow * 0.28;
+        const warmG = 0.6 + glow * 0.3;
+        const warmB = 0.2 + glow * 0.12;
+        colors[i * 3] = clamp(coldR * coolSignal + warmR * warmSignal, 0, 1);
+        colors[i * 3 + 1] = clamp(coldG * coolSignal + warmG * warmSignal, 0, 1);
+        colors[i * 3 + 2] = clamp(coldB * coolSignal + warmB * warmSignal, 0, 1);
+      }
+      return { positions, colors };
+    }
+
+    function buildMemoryMapFrame(count) {
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const imageData = memoryMapImageData;
+      const candidates = imageData && imageData.points;
+      const candidateCount = candidates ? candidates.length / 6 : 0;
+      for (let i = 0; i < count; i++) {
+        const seed = i + 1;
+        let u = seededRandom(seed * 17);
+        let v = seededRandom(seed * 29);
+        let r = 0.36;
+        let g = 0.48;
+        let b = 0.5;
+        let light = 0.46;
+        let edge = 0.18;
+        if (candidateCount) {
+          const source = Math.floor(seededRandom(seed * 83 + 11) * candidateCount) * 6;
+          u = candidates[source];
+          v = candidates[source + 1];
+          r = candidates[source + 2];
+          g = candidates[source + 3];
+          b = candidates[source + 4];
+          light = candidates[source + 5];
+          edge = candidates[source + 5] * 0.4 + Math.abs(r - b) * 0.28;
+        }
+        const mapWidth = 2.72;
+        const mapDepth = 1.28;
+        const x = (u - 0.5) * mapWidth;
+        const z = (v - 0.5) * mapDepth;
+        const ridgeA = Math.sin(x * 4.2 + z * 3.4);
+        const ridgeB = Math.cos(x * 7.8 - z * 5.6);
+        const ridgeC = Math.sin((x + z) * 10.5) * 0.38;
+        const basin = Math.max(0, 1 - Math.hypot(x * 0.78, z * 1.45));
+        const path = memoryRouteInfluence(x, z);
+        const imageLift = Math.pow(light, 1.45) * 0.16 + edge * 0.045;
+        const height = -0.39 + imageLift + ridgeA * 0.045 + ridgeB * 0.032 + ridgeC * 0.022 + basin * 0.07 + path * 0.032;
+        positions[i * 3] = x + (seededRandom(seed * 37) - 0.5) * 0.008;
+        positions[i * 3 + 1] = height + (seededRandom(seed * 41) - 0.5) * 0.018;
+        positions[i * 3 + 2] = z + (seededRandom(seed * 43) - 0.5) * 0.008;
+        const copper = smoothstep(0.34, 0.9, path);
+        const contour = smoothstep(0.84, 1.0, Math.sin((height + 0.46) * 44.0) * 0.5 + 0.5) * 0.18;
+        const terrainShade = clamp(0.6 + light * 0.52 + ridgeA * 0.08 + contour, 0.35, 1.14);
+        colors[i * 3] = clamp((r * 0.36 + 0.2 + basin * 0.1 + copper * 0.72) * terrainShade, 0, 1);
+        colors[i * 3 + 1] = clamp((g * 0.4 + 0.28 + basin * 0.11 + copper * 0.24) * terrainShade, 0, 1);
+        colors[i * 3 + 2] = clamp((b * 0.42 + 0.34 + basin * 0.08 - copper * 0.2) * terrainShade, 0, 1);
+      }
+      return { positions, colors };
+    }
+
+    function buildMemoryMapPrintFrame(mapFrame) {
+      const positions = new Float32Array(mapFrame.positions.length);
+      const colors = new Float32Array(mapFrame.colors.length);
+      const anchors = memoryPrinterAnchors();
+      const count = mapFrame.positions.length / 3;
+      for (let i = 0; i < count; i++) {
+        const offset = i * 3;
+        const seed = i + 1;
+        const anchor = anchors[Math.floor(seededRandom(seed * 53) * anchors.length)];
+        const targetX = mapFrame.positions[offset];
+        const targetY = mapFrame.positions[offset + 1];
+        const targetZ = mapFrame.positions[offset + 2];
+        const early = seededRandom(seed * 59) * 0.2;
+        positions[offset] = mix(anchor[0], targetX, early) + (seededRandom(seed * 61) - 0.5) * 0.1;
+        positions[offset + 1] = mix(anchor[1], targetY + 0.34, early) + seededRandom(seed * 67) * 0.12;
+        positions[offset + 2] = mix(anchor[2], targetZ, early) + (seededRandom(seed * 71) - 0.5) * 0.1;
+        colors[offset] = clamp(mapFrame.colors[offset] * 0.62 + 0.18, 0, 1);
+        colors[offset + 1] = clamp(mapFrame.colors[offset + 1] * 0.72 + 0.16, 0, 1);
+        colors[offset + 2] = clamp(mapFrame.colors[offset + 2] * 0.82 + 0.2, 0, 1);
+      }
+      return { positions, colors };
+    }
+
+    function buildMemoryMapLines() {
+      const positions = [];
+      const colors = [];
+      const copper = [1.0, 0.48, 0.16];
+      const cyan = [0.45, 0.9, 1.0];
+      const route = memoryRoutePoints();
+      for (let i = 0; i < route.length - 1; i++) {
+        addLine(positions, colors, route[i], route[i + 1], copper, 1, 0.44);
+      }
+      for (const point of route) {
+        addMemoryGlowCross(positions, colors, point, [1.0, 0.72, 0.32], 0.026, 0.38);
+      }
+      const anchors = memoryPrinterAnchors();
+      for (let i = 0; i < anchors.length; i++) {
+        const anchor = anchors[i];
+        const target = route[Math.floor((i / Math.max(1, anchors.length - 1)) * (route.length - 1))];
+        addLine(positions, colors, anchor, target, cyan, 1, 0.2);
+        addBoxFrame(positions, colors, anchor, [0.055, 0.025, 0.055], cyan, 0.34);
+      }
+      return {
+        positions: new Float32Array(positions),
+        colors: new Float32Array(colors)
+      };
+    }
+
+    function memoryPrinterAnchors() {
+      return [
+        [-1.16, 0.74, -0.52], [-0.72, 0.86, 0.22], [-0.2, 0.76, -0.68],
+        [0.36, 0.9, 0.58], [0.86, 0.78, -0.22], [1.18, 0.88, 0.36]
+      ];
+    }
+
+    function memoryRoutePoints() {
+      const points = [
+        [-1.04, -0.255, -0.22], [-0.78, -0.236, -0.38], [-0.46, -0.205, -0.28],
+        [-0.2, -0.182, 0.02], [0.12, -0.155, 0.12], [0.42, -0.194, -0.06],
+        [0.76, -0.182, -0.02], [1.05, -0.225, 0.18]
+      ];
+      return points.map(([x, y, z]) => [x, y + Math.sin(x * 4.6 + z * 3.2) * 0.012, z]);
+    }
+
+    function memoryRouteInfluence(x, z) {
+      const route = memoryRoutePoints();
+      let influence = 0;
+      for (let i = 0; i < route.length - 1; i++) {
+        const a = route[i];
+        const b = route[i + 1];
+        const vx = b[0] - a[0];
+        const vz = b[2] - a[2];
+        const wx = x - a[0];
+        const wz = z - a[2];
+        const length2 = vx * vx + vz * vz || 1;
+        const t = clamp((wx * vx + wz * vz) / length2, 0, 1);
+        const px = a[0] + vx * t;
+        const pz = a[2] + vz * t;
+        const d = Math.hypot((x - px) * 1.25, (z - pz) * 1.6);
+        influence = Math.max(influence, 1 - smoothstep(0.0, 0.08, d));
+      }
+      return influence;
+    }
+
+    function addMemoryGlowCross(positions, colors, center, color, radius, alpha) {
+      addLine(positions, colors, [center[0] - radius, center[1], center[2]], [center[0] + radius, center[1], center[2]], color, 1, alpha);
+      addLine(positions, colors, [center[0], center[1], center[2] - radius], [center[0], center[1], center[2] + radius], color, 1, alpha);
+      addLine(positions, colors, [center[0], center[1] - radius * 0.45, center[2]], [center[0], center[1] + radius * 0.55, center[2]], color, 1, alpha * 0.62);
+    }
+
+    function preloadMemoryMapImage() {
+      loadMemoryMapImage().catch(() => {});
+    }
+
+    function loadMemoryMapImage() {
+      if (memoryMapImageData) return Promise.resolve(memoryMapImageData);
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+          memoryMapImageData = sampleMemoryMapImage(image);
+          resolve(memoryMapImageData);
+        };
+        image.onerror = reject;
+        image.src = MEMORY_MAP_URL;
+      });
+    }
+
+    function sampleMemoryMapImage(image) {
+      const width = 560;
+      const height = 320;
+      const canvas2d = document.createElement("canvas");
+      canvas2d.width = width;
+      canvas2d.height = height;
+      const context = canvas2d.getContext("2d", { willReadFrequently: true });
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, width, height);
+      const scaleValue = Math.min(width / image.width, height / image.height) * 0.96;
+      const drawWidth = image.width * scaleValue;
+      const drawHeight = image.height * scaleValue;
+      context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+      const data = context.getImageData(0, 0, width, height).data;
+      const luma = new Float32Array(width * height);
+      for (let i = 0; i < width * height; i++) {
+        const offset = i * 4;
+        const r = data[offset] / 255;
+        const g = data[offset + 1] / 255;
+        const b = data[offset + 2] / 255;
+        luma[i] = r * 0.299 + g * 0.587 + b * 0.114;
+      }
+      const points = [];
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const offset = (y * width + x) * 4;
+          const r = data[offset] / 255;
+          const g = data[offset + 1] / 255;
+          const b = data[offset + 2] / 255;
+          const light = luma[y * width + x];
+          const edge = Math.abs(light - luma[y * width + x - 1])
+            + Math.abs(light - luma[y * width + x + 1])
+            + Math.abs(light - luma[(y - 1) * width + x])
+            + Math.abs(light - luma[(y + 1) * width + x]);
+          if (light < 0.035 && edge < 0.07) continue;
+          const nx = x / width - 0.5;
+          const ny = y / height - 0.5;
+          const centerBias = 1 - smoothstep(0.43, 0.82, Math.hypot(nx * 1.05, ny * 1.5));
+          const warm = clamp((r * 1.2 + g * 0.52 - b * 0.8 - 0.12) * 2.6, 0, 1);
+          const keep = clamp(edge * 3.7 + light * 0.86 + warm * 0.4 + centerBias * 0.18, 0, 1);
+          if (seededRandom(x * 31 + y * 37) > keep) continue;
+          points.push(x / width, y / height, r, g, b, clamp(light + edge * 0.8, 0, 1));
+        }
+      }
+      if (!points.length) points.push(0.5, 0.5, 0.36, 0.46, 0.5, 0.6);
+      return { points: new Float32Array(points), width, height };
+    }
+
+    function preloadStoryImages() {
+      storyScenes.forEach((scene) => {
+        loadStoryImage(scene.image).catch(() => {});
+      });
+    }
+
+    function loadStoryImage(src) {
+      if (storyImageCache.has(src)) return Promise.resolve(storyImageCache.get(src));
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+          const data = sampleStoryImage(image);
+          storyImageCache.set(src, data);
+          resolve(data);
+        };
+        image.onerror = reject;
+        image.src = src;
+      });
+    }
+
+    function sampleStoryImage(image) {
+      const width = 520;
+      const height = 292;
+      const canvas2d = document.createElement("canvas");
+      canvas2d.width = width;
+      canvas2d.height = height;
+      const context = canvas2d.getContext("2d", { willReadFrequently: true });
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, width, height);
+      const scaleValue = Math.min(width / image.width, height / image.height) * 0.9;
+      const drawWidth = image.width * scaleValue;
+      const drawHeight = image.height * scaleValue;
+      context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+      const data = context.getImageData(0, 0, width, height).data;
+      const luma = new Float32Array(width * height);
+      for (let i = 0; i < width * height; i++) {
+        const offset = i * 4;
+        const r = data[offset] / 255;
+        const g = data[offset + 1] / 255;
+        const b = data[offset + 2] / 255;
+        luma[i] = r * 0.299 + g * 0.587 + b * 0.114;
+      }
+      const points = [];
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const offset = (y * width + x) * 4;
+          const r = data[offset] / 255;
+          const g = data[offset + 1] / 255;
+          const b = data[offset + 2] / 255;
+          const light = luma[y * width + x];
+          const edge = Math.abs(light - luma[y * width + x - 1])
+            + Math.abs(light - luma[y * width + x + 1])
+            + Math.abs(light - luma[(y - 1) * width + x])
+            + Math.abs(light - luma[(y + 1) * width + x]);
+          if (light < 0.025 && edge < 0.085) continue;
+          const nx = x / width - 0.5;
+          const ny = y / height - 0.5;
+          const centerBias = 1 - smoothstep(0.36, 0.78, Math.hypot(nx * 1.1, ny * 1.35));
+          const warm = clamp((r * 1.1 + g * 0.55 - b * 0.82 - 0.14) * 2.25, 0, 1);
+          const subject = Math.max(light * 1.18, edge * 4.3, warm * 0.82);
+          const keep = clamp(subject * (0.28 + centerBias * 0.72) + Math.pow(light, 2.35) * 0.24, 0, 1);
+          if (seededRandom(x * 13 + y * 17) > keep) continue;
+          points.push(x / width, y / height, r, g, b, light);
+        }
+      }
+      if (!points.length) points.push(0.5, 0.5, 0.9, 0.8, 0.62, 1);
+      return { points: new Float32Array(points), width, height };
+    }
+
+    function buildStoryLineScenes() {
+      const ink = "#e8eee9";
+      const warm = "#f3b36b";
+      const glass = "#74d7ff";
+      const dim = "#7d8990";
+      const soft = "#bac8c8";
+
+      function segment(scene, a, b, color = ink, width = 1, alpha = 1) {
+        scene.push({ a, b, color, width, alpha });
+      }
+
+      function quad(scene, a, c, b, color = ink, width = 1, alpha = 1) {
+        scene.push({ type: "quad", points: [a, c, b], color, width, alpha });
+      }
+
+      function cubic(scene, a, c1, c2, b, color = ink, width = 1, alpha = 1) {
+        scene.push({ type: "cubic", points: [a, c1, c2, b], color, width, alpha });
+      }
+
+      function softQuad(scene, a, c, b, color = ink, width = 1, alpha = 1, seed = 1) {
+        quad(scene, a, c, b, color, width, alpha * 0.82);
+        for (let pass = 0; pass < 2; pass++) {
+          const jittered = [a, c, b].map((point, index) => {
+            const jx = (seededRandom(seed * 173 + pass * 19 + index * 7) - 0.5) * 0.03;
+            const jy = (seededRandom(seed * 179 + pass * 23 + index * 11) - 0.5) * 0.03;
+            return [point[0] + jx, point[1] + jy];
+          });
+          quad(scene, jittered[0], jittered[1], jittered[2], color, width * 0.46, alpha * 0.18);
+        }
+      }
+
+      function polyline(scene, points, color = ink, width = 1, alpha = 1, closed = false) {
+        for (let i = 0; i < points.length - 1; i++) segment(scene, points[i], points[i + 1], color, width, alpha);
+        if (closed && points.length > 2) segment(scene, points[points.length - 1], points[0], color, width, alpha);
+      }
+
+      function softPolyline(scene, points, color = ink, width = 1, alpha = 1, closed = false, seed = 1) {
+        polyline(scene, points, color, width, alpha * 0.62, closed);
+        const repeats = 3;
+        for (let pass = 0; pass < repeats; pass++) {
+          const shifted = points.map((point, index) => {
+            const jitterX = (seededRandom(seed * 83 + pass * 17 + index * 11) - 0.5) * 0.035;
+            const jitterY = (seededRandom(seed * 89 + pass * 19 + index * 13) - 0.5) * 0.035;
+            return [point[0] + jitterX, point[1] + jitterY];
+          });
+          polyline(scene, shifted, color, width * (0.42 + pass * 0.08), alpha * (0.18 + pass * 0.05), closed);
+        }
+      }
+
+      function rect(scene, center, width, height, color = ink, lineWidth = 1, alpha = 1, skew = 0) {
+        const x = center[0];
+        const y = center[1];
+        const w = width * 0.5;
+        const h = height * 0.5;
+        const points = [
+          [x - w + skew, y - h],
+          [x + w + skew, y - h],
+          [x + w - skew, y + h],
+          [x - w - skew, y + h]
+        ];
+        polyline(scene, points, color, lineWidth, alpha, true);
+      }
+
+      function ellipse(scene, center, rx, ry, color = ink, lineWidth = 1, alpha = 1, start = 0, end = Math.PI * 2) {
+        const steps = Math.max(8, Math.ceil(Math.abs(end - start) / (Math.PI * 2) * 34));
+        let previous = null;
+        for (let i = 0; i <= steps; i++) {
+          const angle = start + (end - start) * (i / steps);
+          const point = [center[0] + Math.cos(angle) * rx, center[1] + Math.sin(angle) * ry];
+          if (previous) segment(scene, previous, point, color, lineWidth, alpha);
+          previous = point;
+        }
+      }
+
+      function envelope(scene, center, width, height, color = warm, lineWidth = 1.2, alpha = 1, skew = 0) {
+        rect(scene, center, width, height, color, lineWidth, alpha, skew);
+        const x = center[0];
+        const y = center[1];
+        const w = width * 0.5;
+        const h = height * 0.5;
+        segment(scene, [x - w + skew, y + h], [x, y], color, lineWidth, alpha * 0.88);
+        segment(scene, [x + w - skew, y + h], [x, y], color, lineWidth, alpha * 0.88);
+        segment(scene, [x - w + skew, y - h], [x, y], color, lineWidth, alpha * 0.55);
+        segment(scene, [x + w - skew, y - h], [x, y], color, lineWidth, alpha * 0.55);
+      }
+
+      function dove(scene, x, y, scale = 1) {
+        ellipse(scene, [x, y], 0.13 * scale, 0.055 * scale, ink, 1.1, 0.95);
+        ellipse(scene, [x + 0.12 * scale, y + 0.025 * scale], 0.045 * scale, 0.035 * scale, ink, 1, 0.9);
+        polyline(scene, [[x - 0.02 * scale, y + 0.03 * scale], [x - 0.14 * scale, y + 0.22 * scale], [x + 0.05 * scale, y + 0.09 * scale]], ink, 1.2, 0.92);
+        polyline(scene, [[x - 0.03 * scale, y], [x - 0.17 * scale, y - 0.13 * scale], [x + 0.03 * scale, y - 0.045 * scale]], ink, 1, 0.74);
+        segment(scene, [x + 0.16 * scale, y + 0.03 * scale], [x + 0.22 * scale, y + 0.045 * scale], warm, 1, 0.86);
+        segment(scene, [x - 0.12 * scale, y], [x - 0.23 * scale, y + 0.04 * scale], ink, 1, 0.72);
+      }
+
+      function rubble(scene) {
+        polyline(scene, [[-0.98, -0.48], [-0.75, -0.4], [-0.57, -0.5], [-0.38, -0.38], [-0.18, -0.49], [0.08, -0.42], [0.28, -0.51]], dim, 1.1, 0.82);
+        polyline(scene, [[-0.95, -0.62], [-0.64, -0.55], [-0.34, -0.62], [-0.02, -0.54], [0.32, -0.63], [0.62, -0.56], [0.86, -0.63]], dim, 1, 0.58);
+        rect(scene, [-0.56, -0.5], 0.23, 0.08, dim, 0.8, 0.52, 0.025);
+        rect(scene, [-0.18, -0.57], 0.2, 0.07, dim, 0.8, 0.48, -0.015);
+        rect(scene, [0.18, -0.52], 0.26, 0.08, dim, 0.8, 0.44, 0.02);
+      }
+
+      function limbBand(scene, a, b, thickness, color = ink, width = 0.85, alpha = 0.82, seed = 1) {
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const length = Math.hypot(dx, dy) || 1;
+        const nx = -dy / length * thickness;
+        const ny = dx / length * thickness;
+        const leftA = [a[0] + nx, a[1] + ny];
+        const leftB = [b[0] + nx * 0.72, b[1] + ny * 0.72];
+        const rightA = [a[0] - nx, a[1] - ny];
+        const rightB = [b[0] - nx * 0.72, b[1] - ny * 0.72];
+        segment(scene, leftA, leftB, color, width, alpha);
+        segment(scene, rightA, rightB, color, width, alpha * 0.82);
+        for (let i = 0; i < 3; i++) {
+          const t = 0.22 + i * 0.23;
+          const jitter = (seededRandom(seed * 53 + i * 11) - 0.5) * thickness * 0.8;
+          const p1 = [
+            mix(leftA[0], leftB[0], t),
+            mix(leftA[1], leftB[1], t) + jitter
+          ];
+          const p2 = [
+            mix(rightA[0], rightB[0], clamp(t + 0.16, 0, 1)),
+            mix(rightA[1], rightB[1], clamp(t + 0.16, 0, 1)) - jitter
+          ];
+          segment(scene, p1, p2, color, width * 0.62, alpha * 0.42);
+        }
+      }
+
+      function wovenOval(scene, center, rx, ry, color = ink, width = 0.75, alpha = 0.46, count = 10, seed = 1) {
+        for (let i = 0; i < count; i++) {
+          const y1 = center[1] + (seededRandom(seed * 101 + i * 17) - 0.5) * ry * 1.72;
+          const y2 = center[1] + (seededRandom(seed * 103 + i * 19) - 0.5) * ry * 1.72;
+          const span1 = rx * Math.sqrt(Math.max(0.05, 1 - Math.pow((y1 - center[1]) / ry, 2)));
+          const span2 = rx * Math.sqrt(Math.max(0.05, 1 - Math.pow((y2 - center[1]) / ry, 2)));
+          const side1 = seededRandom(seed * 107 + i * 23) > 0.5 ? 1 : -1;
+          const side2 = seededRandom(seed * 109 + i * 29) > 0.5 ? 1 : -1;
+          const a = [center[0] + span1 * side1 * (0.45 + seededRandom(seed + i) * 0.55), y1];
+          const b = [center[0] + span2 * side2 * (0.45 + seededRandom(seed * 3 + i) * 0.55), y2];
+          segment(scene, a, b, color, width, alpha * (0.72 + seededRandom(seed * 7 + i) * 0.28));
+        }
+      }
+
+      function looseFigureLines(scene, center, rx, ry, count, color = ink, alpha = 0.22, seed = 1) {
+        for (let i = 0; i < count; i++) {
+          const x = center[0] + (seededRandom(seed * 127 + i * 31) - 0.5) * rx * 2;
+          const y = center[1] + (seededRandom(seed * 131 + i * 37) - 0.5) * ry * 2;
+          const length = (0.08 + seededRandom(seed * 137 + i * 41) * 0.18) * Math.min(rx + ry, 1);
+          const angle = seededRandom(seed * 139 + i * 43) * Math.PI * 2;
+          segment(
+            scene,
+            [x - Math.cos(angle) * length, y - Math.sin(angle) * length * 0.7],
+            [x + Math.cos(angle) * length, y + Math.sin(angle) * length * 0.7],
+            color,
+            0.55,
+            alpha
+          );
+        }
+      }
+
+      function figureWireVolume(scene, center, rx, ry, count, color = ink, alpha = 0.18, seed = 1, lean = 0) {
+        for (let i = 0; i < count; i++) {
+          const y1 = center[1] + (seededRandom(seed * 149 + i * 17) - 0.5) * ry * 2;
+          const y2 = center[1] + (seededRandom(seed * 151 + i * 19) - 0.5) * ry * 2;
+          const xRange1 = rx * Math.sqrt(Math.max(0.08, 1 - Math.pow((y1 - center[1]) / ry, 2)));
+          const xRange2 = rx * Math.sqrt(Math.max(0.08, 1 - Math.pow((y2 - center[1]) / ry, 2)));
+          const x1 = center[0] + lean * (y1 - center[1]) + (seededRandom(seed * 157 + i * 23) - 0.5) * xRange1 * 2;
+          const x2 = center[0] + lean * (y2 - center[1]) + (seededRandom(seed * 163 + i * 29) - 0.5) * xRange2 * 2;
+          segment(scene, [x1, y1], [x2, y2], color, 0.48 + seededRandom(seed + i) * 0.22, alpha);
+        }
+      }
+
+      function figureHead(scene, center, scale = 1, facing = 1, color = ink, alpha = 0.94) {
+        const x = center[0];
+        const y = center[1];
+        const s = scale;
+        softQuad(scene, [x - facing * 0.045 * s, y + 0.075 * s], [x + facing * 0.03 * s, y + 0.12 * s], [x + facing * 0.07 * s, y + 0.035 * s], color, 0.95, alpha, 690);
+        softQuad(scene, [x + facing * 0.07 * s, y + 0.035 * s], [x + facing * 0.085 * s, y - 0.035 * s], [x + facing * 0.02 * s, y - 0.08 * s], color, 0.95, alpha * 0.96, 692);
+        softQuad(scene, [x + facing * 0.02 * s, y - 0.08 * s], [x - facing * 0.055 * s, y - 0.065 * s], [x - facing * 0.065 * s, y + 0.02 * s], color, 0.85, alpha * 0.78, 694);
+        softQuad(scene, [x - facing * 0.065 * s, y + 0.02 * s], [x - facing * 0.09 * s, y + 0.085 * s], [x - facing * 0.045 * s, y + 0.075 * s], color, 0.78, alpha * 0.72, 696);
+        quad(scene, [x + facing * 0.042 * s, y + 0.01 * s], [x + facing * 0.075 * s, y - 0.002 * s], [x + facing * 0.042 * s, y - 0.018 * s], color, 0.52, alpha * 0.5);
+        segment(scene, [x - facing * 0.012 * s, y - 0.076 * s], [x - facing * 0.014 * s, y - 0.14 * s], color, 0.72, alpha * 0.66);
+        segment(scene, [x + facing * 0.026 * s, y - 0.072 * s], [x + facing * 0.018 * s, y - 0.138 * s], color, 0.72, alpha * 0.66);
+      }
+
+      function bentPerson(scene, x, y, scale = 1) {
+        const s = scale;
+        figureHead(scene, [x - 0.26 * s, y + 0.31 * s], s * 0.82, -1, ink, 0.96);
+        cubic(scene, [x - 0.2 * s, y + 0.22 * s], [x - 0.32 * s, y + 0.15 * s], [x - 0.38 * s, y + 0.02 * s], [x - 0.32 * s, y - 0.11 * s], ink, 1.05, 0.9);
+        cubic(scene, [x - 0.1 * s, y + 0.2 * s], [x - 0.02 * s, y + 0.08 * s], [x - 0.02 * s, y - 0.05 * s], [x - 0.12 * s, y - 0.13 * s], ink, 0.95, 0.82);
+        softQuad(scene, [x - 0.31 * s, y + 0.08 * s], [x - 0.48 * s, y - 0.02 * s], [x - 0.64 * s, y - 0.13 * s], ink, 0.88, 0.94, 310);
+        softQuad(scene, [x - 0.16 * s, y + 0.08 * s], [x - 0.07 * s, y - 0.04 * s], [x + 0.04 * s, y - 0.17 * s], ink, 0.72, 0.52, 312);
+        cubic(scene, [x - 0.27 * s, y - 0.1 * s], [x - 0.2 * s, y - 0.2 * s], [x - 0.17 * s, y - 0.32 * s], [x - 0.2 * s, y - 0.46 * s], ink, 0.95, 0.78);
+        cubic(scene, [x - 0.09 * s, y - 0.12 * s], [x + 0.07 * s, y - 0.17 * s], [x + 0.2 * s, y - 0.27 * s], [x + 0.28 * s, y - 0.43 * s], ink, 0.95, 0.78);
+        segment(scene, [x - 0.28 * s, y - 0.46 * s], [x - 0.12 * s, y - 0.46 * s], ink, 0.65, 0.48);
+        segment(scene, [x + 0.2 * s, y - 0.43 * s], [x + 0.34 * s, y - 0.44 * s], ink, 0.65, 0.48);
+        softQuad(scene, [x - 0.31 * s, y + 0.12 * s], [x - 0.2 * s, y + 0.04 * s], [x - 0.08 * s, y - 0.02 * s], ink, 0.42, 0.26, 318);
+      }
+
+      function seatedWriter(scene, x, y, scale = 1) {
+        const s = scale;
+        figureHead(scene, [x - 0.03 * s, y + 0.55 * s], s * 0.88, 1, ink, 0.96);
+        cubic(scene, [x - 0.13 * s, y + 0.4 * s], [x - 0.18 * s, y + 0.24 * s], [x - 0.08 * s, y + 0.08 * s], [x + 0.06 * s, y + 0.02 * s], ink, 0.95, 0.82);
+        cubic(scene, [x + 0.06 * s, y + 0.38 * s], [x + 0.2 * s, y + 0.27 * s], [x + 0.2 * s, y + 0.12 * s], [x + 0.06 * s, y + 0.02 * s], ink, 0.9, 0.76);
+        softQuad(scene, [x + 0.04 * s, y + 0.3 * s], [x + 0.22 * s, y + 0.2 * s], [x + 0.37 * s, y + 0.12 * s], ink, 0.78, 0.9, 421);
+        softQuad(scene, [x - 0.08 * s, y + 0.28 * s], [x - 0.18 * s, y + 0.18 * s], [x - 0.22 * s, y + 0.08 * s], ink, 0.68, 0.54, 431);
+        quad(scene, [x + 0.32 * s, y + 0.14 * s], [x + 0.39 * s, y + 0.13 * s], [x + 0.43 * s, y + 0.1 * s], warm, 0.62, 0.76);
+        softQuad(scene, [x + 0.03 * s, y + 0.02 * s], [x - 0.08 * s, y - 0.1 * s], [x - 0.18 * s, y - 0.2 * s], ink, 0.72, 0.56, 439);
+        softQuad(scene, [x + 0.08 * s, y + 0.02 * s], [x + 0.2 * s, y - 0.04 * s], [x + 0.34 * s, y - 0.12 * s], ink, 0.72, 0.56, 443);
+      }
+
+      function standingPerson(scene, x, y, scale = 1, facing = 1, color = ink) {
+        const s = scale;
+        figureHead(scene, [x + facing * 0.012 * s, y + 0.55 * s], s * 0.9, facing, color, 0.94);
+        cubic(scene, [x - facing * 0.12 * s, y + 0.39 * s], [x - facing * 0.18 * s, y + 0.24 * s], [x - facing * 0.13 * s, y + 0.12 * s], [x - facing * 0.05 * s, y + 0.04 * s], color, 0.92, 0.78);
+        cubic(scene, [x + facing * 0.12 * s, y + 0.38 * s], [x + facing * 0.19 * s, y + 0.24 * s], [x + facing * 0.14 * s, y + 0.11 * s], [x + facing * 0.06 * s, y + 0.04 * s], color, 0.92, 0.78);
+        softQuad(scene, [x + facing * 0.09 * s, y + 0.31 * s], [x + facing * 0.32 * s, y + 0.22 * s], [x + facing * 0.52 * s, y + 0.16 * s], color, 0.82, 0.86, 521);
+        softQuad(scene, [x - facing * 0.08 * s, y + 0.28 * s], [x - facing * 0.12 * s, y + 0.15 * s], [x - facing * 0.14 * s, y + 0.0 * s], color, 0.62, 0.42, 529);
+        cubic(scene, [x - 0.055 * s, y + 0.05 * s], [x - 0.08 * s, y - 0.1 * s], [x - 0.15 * s, y - 0.22 * s], [x - 0.22 * s, y - 0.36 * s], color, 0.85, 0.74);
+        cubic(scene, [x + 0.065 * s, y + 0.05 * s], [x + 0.1 * s, y - 0.1 * s], [x + 0.16 * s, y - 0.22 * s], [x + 0.23 * s, y - 0.36 * s], color, 0.85, 0.74);
+        segment(scene, [x - 0.27 * s, y - 0.36 * s], [x - 0.12 * s, y - 0.36 * s], color, 0.62, 0.48);
+        segment(scene, [x + 0.1 * s, y - 0.36 * s], [x + 0.27 * s, y - 0.36 * s], color, 0.62, 0.48);
+      }
+
+      function table(scene, y = -0.18) {
+        segment(scene, [-0.88, y], [0.85, y], soft, 1.3, 0.84);
+        segment(scene, [-0.72, y], [-0.82, -0.62], soft, 1, 0.62);
+        segment(scene, [0.68, y], [0.78, -0.62], soft, 1, 0.62);
+      }
+
+      function glassCase(scene, center = [0, -0.08], width = 0.92, height = 0.84) {
+        rect(scene, center, width, height, glass, 1.3, 0.86);
+        rect(scene, [center[0] + 0.07, center[1] + 0.05], width * 0.78, height * 0.82, glass, 0.8, 0.36);
+        segment(scene, [center[0] - width * 0.5, center[1] + height * 0.5], [center[0] + width * 0.5, center[1] - height * 0.5], glass, 0.8, 0.24);
+        segment(scene, [center[0] - width * 0.3, center[1] + height * 0.5], [center[0] + width * 0.5, center[1] - height * 0.3], glass, 0.8, 0.18);
+      }
+
+      function openBook(scene, center, scale = 1) {
+        polyline(scene, [[center[0], center[1]], [center[0] - 0.18 * scale, center[1] + 0.07 * scale], [center[0] - 0.33 * scale, center[1] - 0.03 * scale], [center[0], center[1] - 0.1 * scale]], warm, 1, 0.9, true);
+        polyline(scene, [[center[0], center[1]], [center[0] + 0.18 * scale, center[1] + 0.07 * scale], [center[0] + 0.33 * scale, center[1] - 0.03 * scale], [center[0], center[1] - 0.1 * scale]], warm, 1, 0.9, true);
+        segment(scene, [center[0] - 0.25 * scale, center[1] + 0.01 * scale], [center[0] - 0.08 * scale, center[1] - 0.035 * scale], warm, 0.8, 0.52);
+        segment(scene, [center[0] + 0.08 * scale, center[1] - 0.035 * scale], [center[0] + 0.25 * scale, center[1] + 0.01 * scale], warm, 0.8, 0.52);
+      }
+
+      const scene1 = [];
+      rubble(scene1);
+      dove(scene1, -0.52, 0.42, 0.9);
+      envelope(scene1, [-0.18, -0.2], 0.26, 0.16, warm, 1.15, 1, -0.03);
+      bentPerson(scene1, 0.42, -0.1, 0.98);
+      segment(scene1, [-0.42, 0.22], [-0.22, -0.1], warm, 0.9, 0.38);
+      segment(scene1, [-0.28, 0.15], [-0.18, -0.2], warm, 0.9, 0.36);
+
+      const scene2 = [];
+      table(scene2, -0.16);
+      seatedWriter(scene2, -0.4, -0.08, 0.95);
+      rect(scene2, [0.0, -0.04], 0.28, 0.18, warm, 1, 0.76, -0.02);
+      rect(scene2, [0.32, -0.06], 0.26, 0.16, soft, 0.85, 0.58, 0.02);
+      envelope(scene2, [0.55, -0.06], 0.22, 0.13, warm, 0.9, 0.65, 0.01);
+      segment(scene2, [0.08, 0.02], [0.34, 0.1], warm, 0.9, 0.76);
+      polyline(scene2, [[-0.82, 0.42], [-0.7, 0.62], [-0.58, 0.42]], glass, 0.9, 0.54);
+      segment(scene2, [-0.7, 0.42], [-0.78, -0.08], glass, 0.9, 0.42);
+
+      const scene3 = [];
+      standingPerson(scene3, -0.62, -0.38, 0.98, 1, ink);
+      standingPerson(scene3, 0.62, -0.38, 0.98, -1, ink);
+      envelope(scene3, [0, -0.02], 0.36, 0.2, warm, 1.35, 1, 0);
+      segment(scene3, [-0.24, 0.0], [-0.02, -0.02], warm, 1.1, 0.78);
+      segment(scene3, [0.24, 0.0], [0.02, -0.02], warm, 1.1, 0.78);
+      ellipse(scene3, [-0.19, 0.02], 0.055, 0.035, soft, 0.9, 0.72);
+      ellipse(scene3, [0.19, 0.02], 0.055, 0.035, soft, 0.9, 0.72);
+
+      const scene4 = [];
+      glassCase(scene4, [0, -0.06], 0.92, 0.88);
+      segment(scene4, [-0.72, -0.58], [0.72, -0.58], dim, 1.2, 0.54);
+      rect(scene4, [0, -0.31], 0.56, 0.12, soft, 1, 0.42);
+      envelope(scene4, [0, -0.12], 0.42, 0.24, warm, 1.3, 1, -0.015);
+      segment(scene4, [-0.46, 0.42], [0.28, -0.46], glass, 0.9, 0.28);
+      segment(scene4, [-0.22, 0.42], [0.46, -0.36], glass, 0.9, 0.22);
+
+      const scene5 = [];
+      glassCase(scene5, [0.18, -0.04], 0.86, 0.82);
+      envelope(scene5, [0.18, -0.13], 0.34, 0.19, warm, 1.1, 0.72, 0.01);
+      standingPerson(scene5, -0.68, -0.45, 0.82, 1, ink);
+      standingPerson(scene5, 0.84, -0.48, 0.7, -1, soft);
+      openBook(scene5, [-0.4, -0.06], 0.78);
+      segment(scene5, [-0.48, 0.08], [-0.14, 0.08], warm, 0.8, 0.4);
+      segment(scene5, [-0.52, -0.02], [-0.18, -0.02], warm, 0.8, 0.34);
+      segment(scene5, [0.56, 0.28], [0.42, 0.12], glass, 0.8, 0.28);
+
+      return [scene1, scene2, scene3, scene4, scene5];
+    }
+
+    function drawStoryLines(time) {
+      const ctx = storyContext;
+      if (!ctx) return;
+      ctx.clearRect(0, 0, storyCanvas.width, storyCanvas.height);
+      const active = memoryMapActive && storyMode > 0.035;
+      storyCanvas.style.display = active ? "block" : "none";
+      storyCanvas.style.opacity = active ? "1" : "0";
+      if (!active) return;
+      drawMemoryMapOverlay(time);
+    }
+
+    function storyChaosPoint(sceneIndex, lineIndex, endpoint) {
+      const seed = (sceneIndex + 1) * 977 + lineIndex * 37 + endpoint * 131;
+      const angle = seededRandom(seed) * Math.PI * 2;
+      const radius = 0.18 + seededRandom(seed + 9) * 0.98;
+      const x = Math.cos(angle) * radius * 1.15 + (seededRandom(seed + 19) - 0.5) * 0.34;
+      const y = Math.sin(angle) * radius * 0.68 + (seededRandom(seed + 29) - 0.5) * 0.22;
+      return [clamp(x, -1.16, 1.16), clamp(y, -0.76, 0.76)];
+    }
+
+    function storyToCanvas(x, y, centerX, centerY, unit) {
+      return [centerX + x * unit, centerY - y * unit];
+    }
+
+    function storyPoint(kind, index, count) {
+      const u = seededRandom(index * 19 + 3);
+      const v = seededRandom(index * 23 + 7);
+      const w = seededRandom(index * 29 + 11);
+      if (kind === "ruin") {
+        const slab = index % 3;
+        const x = mix(-1.55, -0.16, u);
+        const y = slab === 0 ? mix(-0.62, -0.42, v) : slab === 1 ? mix(-0.2, 0.02, v) : mix(0.26, 0.44, v);
+        const crack = Math.sin(x * 9 + index * 0.03) * 0.045;
+        return [x, y + crack, (w - 0.5) * 0.12];
+      }
+      if (kind === "room") {
+        const cell = index % 4;
+        const col = cell % 2;
+        const row = Math.floor(cell / 2);
+        const cx = -0.56 + col * 0.68;
+        const cy = -0.24 + row * 0.48;
+        const edge = index % 5 === 0;
+        const x = edge ? cx + (u < 0.5 ? -0.28 : 0.28) : cx + (u - 0.5) * 0.48;
+        const y = edge ? cy + (v - 0.5) * 0.34 : cy + (v - 0.5) * 0.28;
+        return [x, y, (w - 0.5) * 0.08];
+      }
+      if (kind === "wire") {
+        const t = index / Math.max(1, count - 1);
+        const x = mix(-1.42, 1.42, t);
+        const y = Math.sin(t * Math.PI * 3.0) * 0.28 + Math.sin(t * Math.PI * 9.0) * 0.035;
+        const strand = (index % 7 - 3) * 0.012;
+        return [x, y + strand, (w - 0.5) * 0.06];
+      }
+      if (kind === "tower") {
+        const side = index % 5;
+        const y = mix(-0.78, 0.82, u);
+        const radius = side === 0 ? 0.36 : side === 1 ? 0.24 : 0.3;
+        const angle = v * Math.PI * 2;
+        const x = Math.cos(angle) * radius * (side % 2 ? 0.55 : 0.92);
+        const z = Math.sin(angle) * 0.12;
+        return [x, y, z];
+      }
+      const cols = 7;
+      const rows = 4;
+      const cell = index % (cols * rows);
+      const col = cell % cols;
+      const row = Math.floor(cell / cols);
+      const cx = -1.2 + col * 0.4;
+      const cy = -0.58 + row * 0.34;
+      const edge = index % 4 === 0;
+      const x = edge ? cx + (u < 0.5 ? -0.16 : 0.16) : cx + (u - 0.5) * 0.28;
+      const y = edge ? cy + (v - 0.5) * 0.22 : cy + (v - 0.5) * 0.18;
+      return [x, y, (w - 0.5) * 0.08];
+    }
+
+    function storyColor(palette, index, point) {
+      const n = seededRandom(index * 31 + 5);
+      if (palette === "cold") return [0.46 + n * 0.16, 0.68 + n * 0.18, 0.74 + n * 0.16];
+      if (palette === "warm") return [0.92 + n * 0.08, 0.58 + n * 0.18, 0.26 + n * 0.08];
+      if (palette === "copper") return [0.95 + n * 0.05, 0.48 + n * 0.16, 0.16 + n * 0.08];
+      if (palette === "glass") return [0.52 + n * 0.18, 0.86 + n * 0.12, 1.0];
+      return [0.78 + n * 0.14, 0.72 + n * 0.12, 0.56 + n * 0.1];
+    }
+
+    function buildReferenceLightBeams() {
+      const positions = [];
+      const colors = [];
+      const cold = [0.62, 0.82, 0.92];
+      const warm = [1.0, 0.64, 0.28];
+      addBeamFan(positions, colors, [-0.56, 0.34, 0.16], [-0.42, 0.12, 0.02], 0.1, cold, 0.34);
+      addBeamFan(positions, colors, [-0.5, -0.2, 0.14], [-0.36, -0.34, 0.02], 0.09, cold, 0.3);
+      addBeamFan(positions, colors, [-0.18, 0.28, 0.12], [-0.1, 0.08, -0.02], 0.07, cold, 0.22);
+      addBeamFan(positions, colors, [0.44, 0.42, 0.14], [0.38, 0.18, 0.0], 0.08, warm, 0.28);
+      addBeamFan(positions, colors, [0.58, -0.16, 0.14], [0.5, -0.34, 0.02], 0.07, cold, 0.25);
+
+      const nodes = [
+        [-0.5, 0.08, 0.04], [-0.38, -0.28, 0.06], [-0.12, -0.48, 0.02],
+        [0.08, -0.06, 0.04], [0.32, 0.26, 0.05], [0.48, -0.12, 0.08],
+        [0.58, -0.38, 0.06], [0.66, 0.02, 0.04]
+      ];
+      for (const node of nodes) addGlowCross(positions, colors, node, warm, 0.025, 0.38);
+      return {
+        positions: new Float32Array(positions),
+        colors: new Float32Array(colors)
+      };
+    }
+
+    function addBeamFan(positions, colors, source, target, spread, color, alpha) {
+      const rays = 9;
+      for (let i = 0; i < rays; i++) {
+        const t = rays === 1 ? 0 : i / (rays - 1);
+        const offset = (t - 0.5) * spread;
+        const end = [target[0] + offset, target[1] + Math.sin(t * Math.PI) * spread * 0.12, target[2]];
+        addLine(positions, colors, source, end, color, 1, alpha * (1 - Math.abs(t - 0.5) * 0.72));
+      }
+    }
+
+    function addGlowCross(positions, colors, center, color, radius, alpha) {
+      addLine(positions, colors, [center[0] - radius, center[1], center[2]], [center[0] + radius, center[1], center[2]], color, 1, alpha);
+      addLine(positions, colors, [center[0], center[1] - radius, center[2]], [center[0], center[1] + radius, center[2]], color, 1, alpha * 0.85);
+      addLine(positions, colors, [center[0] - radius * 0.7, center[1] - radius * 0.7, center[2]], [center[0] + radius * 0.7, center[1] + radius * 0.7, center[2]], color, 1, alpha * 0.42);
+      addLine(positions, colors, [center[0] - radius * 0.7, center[1] + radius * 0.7, center[2]], [center[0] + radius * 0.7, center[1] - radius * 0.7, center[2]], color, 1, alpha * 0.42);
+    }
+
+    function buildColors(positions, dim = 1) {
+      const colors = new Float32Array(positions.length);
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        const height = clamp((y + 1.1) / 2.2, 0, 1);
+        const depth = clamp((z + 1.1) / 2.2, 0, 1);
+        const lateral = clamp((x + 1.08) / 2.16, 0, 1);
+        const texture = Math.abs(Math.sin(x * 18.0 + y * 7.0) * Math.cos(z * 13.0));
+        const paperBase = [0.44, 0.38, 0.28];
+        const coldRuin = [0.46, 0.62, 0.68];
+        const inkDark = [0.08, 0.105, 0.1];
+        const lamp = [1.0, 0.68, 0.32];
+        const paleBeam = [0.78, 0.9, 0.95];
+
+        const leftRuinLight = smoothstep(0.06, 0.32, 1 - lateral) * smoothstep(0.22, 0.72, height);
+        const archiveLamp = smoothstep(0.28, 0.72, lateral) * smoothstep(0.18, 0.78, 1 - Math.abs(height - 0.52) * 1.5);
+        const lowerLamp = smoothstep(0.26, 0.62, lateral) * smoothstep(0.58, 0.92, 1 - height);
+        const verticalShaft = smoothstep(0.68, 0.94, lateral) * smoothstep(0.08, 0.92, height) * (0.5 + 0.5 * Math.sin((y + z) * 18.0));
+        const mappedLight = referenceLightAt(x, y, z);
+        const warmLight = clamp(archiveLamp * 0.48 + lowerLamp * 0.28 + verticalShaft * 0.18 + mappedLight.warm * 1.08, 0, 0.98);
+        const coldLight = clamp(leftRuinLight * 0.42 + smoothstep(0.12, 0.7, depth) * 0.12 + mappedLight.cold * 0.95, 0, 0.9);
+        const shadow = clamp(texture * 0.22 + smoothstep(0.75, 1.0, Math.abs(x)) * 0.18 + smoothstep(0.72, 1.0, Math.abs(z)) * 0.12, 0, 0.5);
+        const paperWash = 0.18 + texture * 0.1;
+
+        let r = mix(paperBase[0], coldRuin[0], coldLight);
+        let g = mix(paperBase[1], coldRuin[1], coldLight);
+        let b = mix(paperBase[2], coldRuin[2], coldLight);
+        r = mix(r, lamp[0], warmLight);
+        g = mix(g, lamp[1], warmLight);
+        b = mix(b, lamp[2], warmLight);
+        r = mix(r, paleBeam[0], leftRuinLight * 0.18);
+        g = mix(g, paleBeam[1], leftRuinLight * 0.18);
+        b = mix(b, paleBeam[2], leftRuinLight * 0.18);
+        const beamDust = mappedLight.beam * (0.62 + texture * 0.5);
+        const beamCore = mappedLight.beamCore * (0.82 + texture * 0.34);
+        const warmBeam = mappedLight.warmBeam * (0.72 + texture * 0.32);
+        r = clamp(r + mappedLight.hot * 0.34 + mappedLight.cold * 0.08 + beamDust * 0.1 + beamCore * 0.16 + warmBeam * 0.22, 0, 1);
+        g = clamp(g + mappedLight.hot * 0.2 + mappedLight.cold * 0.15 + beamDust * 0.24 + beamCore * 0.3 + warmBeam * 0.12, 0, 1);
+        b = clamp(b + mappedLight.hot * 0.08 + mappedLight.cold * 0.2 + beamDust * 0.34 + beamCore * 0.36 + warmBeam * 0.05, 0, 1);
+        r = mix(r, inkDark[0], shadow);
+        g = mix(g, inkDark[1], shadow);
+        b = mix(b, inkDark[2], shadow);
+
+        colors[i] = clamp((r + paperWash * 0.06) * 1.06, 0, 1) * dim;
+        colors[i + 1] = clamp((g + paperWash * 0.045) * 1.06, 0, 1) * dim;
+        colors[i + 2] = clamp((b + paperWash * 0.025) * 1.05, 0, 1) * dim;
+      }
+      return colors;
+    }
+
+    function referenceLightAt(x, y, z) {
+      const warmPoints = [
+        [-0.5, 0.1, 0.04, 0.22, 1.02],
+        [-0.36, -0.3, 0.06, 0.2, 0.88],
+        [0.08, -0.06, 0.04, 0.22, 0.86],
+        [0.32, 0.26, 0.05, 0.22, 1.0],
+        [0.48, -0.12, 0.08, 0.2, 0.9],
+        [0.66, 0.02, 0.04, 0.18, 0.74],
+        [0.58, -0.38, 0.06, 0.17, 0.68]
+      ];
+      const coldPoints = [
+        [-0.52, 0.34, 0.04, 0.25, 1.06],
+        [-0.46, -0.18, 0.04, 0.22, 0.9],
+        [-0.16, 0.22, 0.02, 0.18, 0.68],
+        [0.18, -0.08, 0.04, 0.17, 0.62],
+        [0.54, -0.3, 0.08, 0.18, 0.72]
+      ];
+      let warm = 0;
+      let cold = 0;
+      let hot = 0;
+      for (const [lx, ly, lz, radius, power] of warmPoints) {
+        const d = Math.hypot((x - lx) * 1.35, (y - ly) * 1.1, (z - lz) * 0.85);
+        const glow = Math.pow(1 - smoothstep(0, radius, d), 1.35) * power;
+        warm += glow;
+        hot += Math.pow(1 - smoothstep(0, radius * 0.42, d), 1.8) * power;
+      }
+      for (const [lx, ly, lz, radius, power] of coldPoints) {
+        const d = Math.hypot((x - lx) * 1.2, (y - ly) * 1.05, (z - lz) * 0.8);
+        cold += Math.pow(1 - smoothstep(0, radius, d), 1.35) * power;
+      }
+
+      const leftUpperBeam = beamLight(x, y, z, [-0.56, 0.34, 0.16], [-0.42, 0.1, 0.01], 0.19, 1.1);
+      const leftLowerBeam = beamLight(x, y, z, [-0.5, -0.2, 0.14], [-0.34, -0.36, 0.0], 0.18, 0.96);
+      const midCoolBeam = beamLight(x, y, z, [-0.18, 0.28, 0.12], [-0.05, 0.0, -0.02], 0.13, 0.66);
+      const rightLowerBeam = beamLight(x, y, z, [0.58, -0.16, 0.14], [0.5, -0.36, 0.0], 0.15, 0.82);
+      const warmShaft = beamLight(x, y, z, [0.44, 0.42, 0.14], [0.36, 0.15, -0.01], 0.17, 0.92);
+      const coldBeam = leftUpperBeam + leftLowerBeam + midCoolBeam + rightLowerBeam;
+      const beamMist = coldBeam + warmShaft;
+      const beamCore = Math.pow(clamp(beamMist, 0, 1), 1.45);
+      cold += coldBeam * 1.1;
+      warm += warmShaft * 1.05;
+      return {
+        warm: clamp(warm, 0, 1),
+        cold: clamp(cold, 0, 1),
+        hot: clamp(hot, 0, 1),
+        beam: clamp(beamMist, 0, 1),
+        beamCore: clamp(beamCore, 0, 1),
+        warmBeam: clamp(warmShaft, 0, 1)
+      };
+    }
+
+    function beamLight(x, y, z, start, end, radius, power) {
+      const vx = end[0] - start[0];
+      const vy = end[1] - start[1];
+      const vz = end[2] - start[2];
+      const wx = x - start[0];
+      const wy = y - start[1];
+      const wz = z - start[2];
+      const length2 = vx * vx + vy * vy + vz * vz || 1;
+      const t = clamp((wx * vx + wy * vy + wz * vz) / length2, 0, 1);
+      const px = start[0] + vx * t;
+      const py = start[1] + vy * t;
+      const pz = start[2] + vz * t;
+      const d = Math.hypot((x - px) * 1.15, (y - py) * 1.0, (z - pz) * 0.72);
+      const core = Math.pow(1 - smoothstep(0, radius * 0.46, d), 1.85);
+      const halo = Math.pow(1 - smoothstep(radius * 0.22, radius, d), 1.18) * 0.52;
+      const falloff = core + halo;
+      const lengthFade = smoothstep(0.0, 0.12, t) * (1 - smoothstep(0.86, 1, t) * 0.25);
+      return falloff * lengthFade * power;
+    }
+
+    function draw(time) {
+      if (!pointCount) return;
+      resize();
+
+      if (autoRotate && !dragging) targetRotationY += 0.00065;
+      rotationX += (targetRotationX - rotationX) * 0.08;
+      rotationY += (targetRotationY - rotationY) * 0.08;
+      if (scanStartTime) {
+        const elapsed = Math.max(0, (time || performance.now()) - scanStartTime);
+        scanProgress = clamp(elapsed / SCAN_DURATION, 0, 1);
+      }
+      if (storyTransitionStart) {
+        const storyElapsed = Math.max(0, (time || performance.now()) - storyTransitionStart);
+        storyTransition = clamp(storyElapsed / STORY_TRANSITION_DURATION, 0, 1);
+      }
+      storyMode += (targetStoryMode - storyMode) * 0.075;
+      if (storyMode < 0.98) updateScanGrid();
+      const gestureEase = gestureEnabled ? 0.038 : 0.095;
+      zoom += (targetZoom - zoom) * gestureEase;
+      cameraDistance += (targetCameraDistance - cameraDistance) * gestureEase;
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.CULL_FACE);
+      gl.disable(gl.DEPTH_TEST);
+
+      if (surfaceVertexCount && storyMode < 0.92) {
+        gl.useProgram(surfaceProgram);
+        bindFloatBuffer(surfacePositionBuffer, surfacePositionLocation, null, 3);
+        bindFloatBuffer(surfaceColorBuffer, surfaceColorLocation, null, 3);
+        gl.uniformMatrix4fv(surfaceMatrixLocation, false, buildMatrix());
+        gl.uniform1f(surfaceAlphaLocation, surfaceAlpha());
+        gl.drawArrays(gl.TRIANGLES, 0, surfaceVertexCount);
+      }
+
+      gl.useProgram(lineProgram);
+      gl.uniformMatrix4fv(lineMatrixLocation, false, buildMatrix());
+      if (roomLineVertexCount && storyMode < 0.9) {
+        bindFloatBuffer(roomLinePositionBuffer, linePositionLocation, null, 3);
+        bindFloatBuffer(roomLineColorBuffer, lineColorLocation, null, 3);
+        gl.uniform1f(lineAlphaLocation, roomLineAlpha());
+        gl.drawArrays(gl.LINES, 0, roomLineVertexCount);
+      }
+      if (scanLineVertexCount && scanGridAlpha() > 0.01 && storyMode < 0.75) {
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        bindFloatBuffer(scanLinePositionBuffer, linePositionLocation, null, 3);
+        bindFloatBuffer(scanLineColorBuffer, lineColorLocation, null, 3);
+        gl.uniform1f(lineAlphaLocation, scanGridAlpha());
+        gl.drawArrays(gl.LINES, 0, scanLineVertexCount);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      }
+      if (memoryMapActive && memoryLineVertexCount) {
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        bindFloatBuffer(memoryLinePositionBuffer, linePositionLocation, null, 3);
+        bindFloatBuffer(memoryLineColorBuffer, lineColorLocation, null, 3);
+        gl.uniform1f(lineAlphaLocation, smoothstep(0.12, 1.0, storyTransition) * 0.88);
+        gl.drawArrays(gl.LINES, 0, memoryLineVertexCount);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      }
+
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.DEPTH_TEST);
+
+      gl.useProgram(program);
+      bindFloatBuffer(positionBuffer, positionLocation, null, 3);
+      bindFloatBuffer(scatterBuffer, scatterLocation, null, 3);
+      bindFloatBuffer(colorBuffer, colorLocation, null, 3);
+      bindFloatBuffer(releaseBuffer, releaseLocation, null, 1);
+      bindFloatBuffer(storyFromPositionBuffer, storyFromPositionLocation, null, 3);
+      bindFloatBuffer(storyToPositionBuffer, storyToPositionLocation, null, 3);
+      bindFloatBuffer(storyFromColorBuffer, storyFromColorLocation, null, 3);
+      bindFloatBuffer(storyToColorBuffer, storyToColorLocation, null, 3);
+      gl.uniformMatrix4fv(matrixLocation, false, buildMatrix());
+      gl.uniform1f(pixelRatioLocation, Math.min(window.devicePixelRatio || 1, 2));
+      gl.uniform1f(scatterMixLocation, scatterAmount());
+      gl.uniform1f(pointScaleLocation, 1.0);
+      gl.uniform1f(alphaScaleLocation, 1.0);
+      gl.uniform1f(scanProgressLocation, scanProgress);
+      gl.uniform1f(storyModeLocation, storyMode);
+      gl.uniform1f(storyTransitionLocation, storyTransition);
+      gl.uniform1f(timeLocation, time || 0);
+      gl.uniform2f(pointerLightLocation, pointerLightX, pointerLightY);
+      gl.uniform1f(pointerLightActiveLocation, pointerLightActive);
+      gl.drawArrays(gl.POINTS, 0, pointCount);
+      drawStoryLines(time || performance.now());
+      drawSubtitleParticles(time || performance.now());
+      requestAnimationFrame(draw);
+    }
+
+    function drawMemoryMapOverlay(time) {
+      const ctx = storyContext;
+      if (!ctx) return;
+      const width = storyCanvas.width;
+      const height = storyCanvas.height;
+      const ratio = window.devicePixelRatio || 1;
+      const elapsed = memoryMapRevealStart ? time - memoryMapRevealStart : 0;
+      const reveal = smoothstep(0, 1, clamp(elapsed / 5200, 0, 1));
+      const centerX = width * 0.5;
+      const centerY = height * 0.44;
+      const unit = Math.min(width * 0.28, height * 0.42);
+      const drones = [
+        [-1.05, -0.62, -0.52, 0.12], [-0.58, -0.78, -0.26, -0.04],
+        [-0.12, -0.68, 0.02, 0.22], [0.38, -0.8, 0.28, -0.12],
+        [0.86, -0.62, 0.54, 0.1], [1.12, -0.72, 0.78, -0.04]
+      ];
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < drones.length; i++) {
+        const [dx, dy, tx, ty] = drones[i];
+        const phase = clamp(reveal * 1.25 - i * 0.055, 0, 1);
+        if (phase <= 0) continue;
+        const pulse = 0.68 + Math.sin(time * 0.0024 + i * 0.8) * 0.32;
+        const x1 = centerX + dx * unit;
+        const y1 = centerY + dy * unit;
+        const x2 = centerX + tx * unit;
+        const y2 = centerY + ty * unit;
+        const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+        const alpha = phase * (0.045 + pulse * 0.04);
+        gradient.addColorStop(0, `rgba(126, 222, 245, ${alpha})`);
+        gradient.addColorStop(0.55, `rgba(202, 234, 230, ${alpha * 0.55})`);
+        gradient.addColorStop(1, `rgba(246, 170, 75, ${alpha * 0.85})`);
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = (0.58 + pulse * 0.42) * ratio;
+        ctx.shadowColor = "rgba(121, 220, 246, 0.55)";
+        ctx.shadowBlur = 5 * ratio * phase;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        ctx.fillStyle = `rgba(174, 234, 245, ${0.16 * phase})`;
+        ctx.shadowBlur = 8 * ratio * phase;
+        ctx.beginPath();
+        ctx.arc(x1, y1, (2.2 + pulse * 1.2) * ratio, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const scanY = centerY + mix(-0.12, 0.38, reveal) * unit;
+      const scanGradient = ctx.createLinearGradient(centerX - unit * 1.18, scanY, centerX + unit * 1.18, scanY);
+      scanGradient.addColorStop(0, "rgba(124, 220, 245, 0)");
+      scanGradient.addColorStop(0.5, `rgba(244, 184, 91, ${0.12 * reveal})`);
+      scanGradient.addColorStop(1, "rgba(124, 220, 245, 0)");
+      ctx.strokeStyle = scanGradient;
+      ctx.shadowColor = "rgba(244, 180, 90, 0.55)";
+      ctx.shadowBlur = 10 * ratio * reveal;
+      ctx.lineWidth = 1.1 * ratio;
+      ctx.beginPath();
+      ctx.moveTo(centerX - unit * 1.22, scanY);
+      ctx.lineTo(centerX + unit * 1.22, scanY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function rebuildSubtitleParticles(text) {
+      subtitleParticles = [];
+      if (!text) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = subtitleCanvas.width;
+      const height = subtitleCanvas.height;
+      if (!width || !height) return;
+
+      const measureCanvas = document.createElement("canvas");
+      const measureContext = measureCanvas.getContext("2d", { willReadFrequently: true });
+      const fontSize = clamp(Math.round(window.innerWidth * 0.0185), 21, 30) * ratio;
+      const paddingX = 34 * ratio;
+      const paddingY = 20 * ratio;
+      measureContext.font = `350 ${fontSize}px "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif`;
+      const textWidth = Math.ceil(measureContext.measureText(text).width);
+      const boxWidth = Math.min(width - paddingX * 2, textWidth + paddingX * 2);
+      const boxHeight = Math.ceil(fontSize * 1.9 + paddingY * 2);
+      measureCanvas.width = Math.max(1, Math.ceil(boxWidth));
+      measureCanvas.height = Math.max(1, boxHeight);
+
+      const ctx = measureContext;
+      ctx.clearRect(0, 0, measureCanvas.width, measureCanvas.height);
+      ctx.font = `350 ${fontSize}px "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.76)";
+      ctx.lineWidth = 2.4 * ratio;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.92)";
+      ctx.shadowBlur = 7 * ratio;
+      ctx.strokeText(text, measureCanvas.width / 2, measureCanvas.height / 2);
+      ctx.fillStyle = "#ffe1ad";
+      ctx.shadowColor = "rgba(255, 195, 98, 0.96)";
+      ctx.shadowBlur = 5 * ratio;
+      ctx.fillText(text, measureCanvas.width / 2, measureCanvas.height / 2);
+
+      const image = ctx.getImageData(0, 0, measureCanvas.width, measureCanvas.height).data;
+      const targetX = (width - measureCanvas.width) / 2;
+      const targetY = height * 0.865;
+      const step = Math.max(1, Math.round(1.45 * ratio));
+      const centerX = width / 2;
+      const centerY = targetY + measureCanvas.height / 2;
+      for (let y = 0; y < measureCanvas.height; y += step) {
+        for (let x = 0; x < measureCanvas.width; x += step) {
+          const offset = (y * measureCanvas.width + x) * 4;
+          const alpha = image[offset + 3] / 255;
+          if (alpha < 0.14) continue;
+          const seed = subtitleParticles.length + x * 13 + y * 17;
+          const spread = 90 * ratio + seededRandom(seed * 5) * 170 * ratio;
+          const angle = seededRandom(seed * 7) * Math.PI * 2;
+          const driftY = (seededRandom(seed * 11) - 0.35) * 130 * ratio;
+          subtitleParticles.push({
+            x: targetX + x,
+            y: targetY + y,
+            sx: centerX + Math.cos(angle) * spread,
+            sy: centerY + Math.sin(angle) * spread * 0.46 + driftY,
+            size: (0.72 + alpha * 1.08 + seededRandom(seed * 19) * 0.42) * ratio,
+            alpha,
+            warm: seededRandom(seed * 23)
+          });
+        }
+      }
+      subtitleStartTime = performance.now();
+    }
+
+    function drawSubtitleParticles(time) {
+      const ctx = subtitleContext;
+      const width = subtitleCanvas.width;
+      const height = subtitleCanvas.height;
+      ctx.clearRect(0, 0, width, height);
+      if (storySceneIndex < 0 || storyMode < 0.35 || !subtitleParticles.length) return;
+
+      const elapsed = Math.max(0, time - subtitleStartTime);
+      const progress = smoothstep(0, 1, clamp(elapsed / 1850, 0, 1));
+      const storyFade = smoothstep(0.28, 0.92, storyMode);
+      const transitionFade = smoothstep(0.08, 0.78, storyTransition);
+      const alphaScale = storyFade * transitionFade;
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      for (const point of subtitleParticles) {
+        const wobble = Math.sin(time * 0.002 + point.x * 0.03 + point.y * 0.015) * (1 - progress) * 5;
+        const x = mix(point.sx, point.x, progress) + wobble;
+        const y = mix(point.sy, point.y, progress) + wobble * 0.38;
+        const alpha = point.alpha * alphaScale * (0.42 + progress * 0.78);
+        if (progress > 0.72) {
+          ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.34})`;
+          ctx.beginPath();
+          ctx.arc(x + 1.2, y + 1.2, point.size * 1.34, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = point.warm > 0.36
+          ? `rgba(255, 213, 150, ${Math.min(1, alpha)})`
+          : `rgba(226, 244, 238, ${Math.min(1, alpha * 0.9)})`;
+        ctx.beginPath();
+        ctx.arc(x, y, point.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function scatterAmount() {
+      if (storyMode > 0.5) return 0;
+      const zoomScatter = smoothstep(1.28, 0.78, zoom);
+      if (!gestureEnabled) return zoomScatter;
+      const distanceScatter = gestureCalibrated ? gestureDistanceScatter : 0;
+      return Math.max(zoomScatter, distanceScatter);
+    }
+
+    function surfaceAlpha() {
+      const scatter = scatterAmount();
+      const reveal = smoothstep(0.28, 1.0, scanProgress);
+      return (0.07 + (1 - scatter) * 0.19 + scatter * 0.018) * (0.18 + reveal * 0.82);
+    }
+
+    function roomLineAlpha() {
+      const reveal = smoothstep(0.18, 0.92, scanProgress);
+      return (0.045 + (1 - scatterAmount()) * 0.12) * (0.08 + reveal * 0.92);
+    }
+
+    function beamLineAlpha() {
+      const solid = 1 - scatterAmount();
+      return 0.03 + solid * solid * 0.34;
+    }
+
+    function scanGridAlpha() {
+      const intro = smoothstep(0.0, 0.08, scanProgress);
+      const outro = 1 - smoothstep(0.9, 1.0, scanProgress);
+      return 0.32 * intro * outro;
+    }
+
+    function buildMatrix() {
+      const aspect = canvas.width / Math.max(1, canvas.height);
+      const projection = perspective(Math.PI / 4.3, aspect, 0.01, 100);
+      let model = identity();
+      const flat = clamp(storyMode, 0, 1);
+      const mapBlend = memoryMapActive ? flat : 0;
+      const activeDistance = mix(mix(cameraDistance, 3.25, flat), targetCameraDistance, mapBlend);
+      model = multiply(model, translate(0, 0, -activeDistance));
+      model = multiply(model, rotateX(memoryMapActive ? rotationX : rotationX * (1 - flat)));
+      model = multiply(model, rotateY(memoryMapActive ? rotationY : rotationY * (1 - flat)));
+      const sx = memoryMapActive ? 1.14 : mix(1.32, 1.22, flat);
+      const sy = memoryMapActive ? 1.06 : mix(1.05, 1.22, flat);
+      const sz = memoryMapActive ? 1.18 : mix(1.55, 0.24, flat);
+      model = multiply(model, scale(zoom * sx, zoom * sy, zoom * sz));
+      return multiply(projection, model);
+    }
+
+    function initEvents() {
+      canvas.focus({ preventScroll: true });
+
+      canvas.addEventListener("pointerdown", (event) => {
+        updatePointerLight(event);
+        dragging = true;
+        pointerMoved = false;
+        pointerStartX = event.clientX;
+        pointerStartY = event.clientY;
+        autoRotate = false;
+        lastX = event.clientX;
+        lastY = event.clientY;
+        canvas.focus({ preventScroll: true });
+        canvas.setPointerCapture(event.pointerId);
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        updatePointerLight(event);
+        if (!dragging) return;
+        const dx = event.clientX - lastX;
+        const dy = event.clientY - lastY;
+        if (Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > 8) pointerMoved = true;
+        lastX = event.clientX;
+        lastY = event.clientY;
+        targetRotationY += dx * 0.006;
+        targetRotationX += dy * 0.006;
+        targetRotationX = clamp(targetRotationX, -1.45, 1.45);
+      });
+
+      canvas.addEventListener("pointerup", (event) => {
+        dragging = false;
+        canvas.releasePointerCapture(event.pointerId);
+        if (!pointerMoved && (storySceneIndex >= 0 || scanProgress > 0.88)) advanceStoryScene();
+      });
+
+      canvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        autoRotate = false;
+        targetZoom *= event.deltaY > 0 ? 0.955 : 1.047;
+        targetZoom = clamp(targetZoom, 0.55, 3.2);
+      }, { passive: false });
+
+      canvas.addEventListener("dblclick", () => {
+        targetRotationX = -0.28;
+        targetRotationY = 0.34;
+        targetZoom = 1.08;
+        targetCameraDistance = 4.15;
+        autoRotate = true;
+        memoryMapActive = false;
+        memoryMapRevealStart = 0;
+        stopStoryMusic();
+        startScanReveal();
+      });
+
+      const handleStoryKey = (event) => {
+        if (event.code !== "Space" && event.key !== " ") return;
+        if (event.repeat) return;
+        event.preventDefault();
+        advanceStoryScene();
+      };
+      document.addEventListener("keydown", handleStoryKey, true);
+      window.addEventListener("keydown", handleStoryKey, true);
+
+      const handleMemoryKey = (event) => {
+        if (event.code !== "KeyC" && String(event.key || "").toLowerCase() !== "c") return;
+        if (event.repeat) return;
+        event.preventDefault();
+        enterMemoryMap();
+      };
+      document.addEventListener("keydown", handleMemoryKey, true);
+      window.addEventListener("keydown", handleMemoryKey, true);
+
+      cameraButton.addEventListener("click", () => {
+        if (gestureEnabled) {
+          stopGestureCamera();
+        } else {
+          startGestureCamera();
+        }
+      });
+
+    }
+
+    function updatePointerLight(event) {
+      const rect = canvas.getBoundingClientRect();
+      pointerLightX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      pointerLightY = 1 - ((event.clientY - rect.top) / Math.max(1, rect.height)) * 2;
+      pointerLightActive = 1;
+    }
+
+    async function startGestureCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        gestureStatusEl.textContent = "这个浏览器不支持摄像头手势控制。";
+        return;
+      }
+
+      try {
+        cameraButton.disabled = true;
+        gestureStatusEl.textContent = "正在请求摄像头权限...";
+        gestureStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          },
+          audio: false
+        });
+        gestureVideo.srcObject = gestureStream;
+        await gestureVideo.play();
+        gestureEnabled = true;
+        cameraButton.disabled = false;
+        cameraButton.textContent = "关闭手势控制";
+        gestureVideo.classList.add("visible");
+        gestureOverlay.classList.add("visible");
+        gestureGuide.dataset.progress = "五指确认 0 / 4 秒";
+        autoRotate = false;
+        gestureConfirmStart = 0;
+        gestureCalibrated = false;
+        gestureDistanceScatter = 0;
+        gestureLastVideoTime = -1;
+        gestureLastDetectedHand = null;
+        mediaPipeReady = false;
+        gestureStatusEl.textContent = "摄像头已开启，正在加载 MediaPipe 手部识别...";
+        ensureMediaPipeHands().then(() => {
+          if (!gestureEnabled) return;
+          mediaPipeReady = true;
+          gestureStatusEl.textContent = "MediaPipe 已就绪：请把五指张开的手放入右下角框内，保持4秒。";
+        }).catch(() => {
+          if (!gestureEnabled) return;
+          mediaPipeReady = false;
+          gestureStatusEl.textContent = "MediaPipe 加载失败：请检查网络后重新开启手势控制。";
+        });
+        requestAnimationFrame(trackGestureFrame);
+      } catch (error) {
+        cameraButton.disabled = false;
+        cameraButton.textContent = "开启手势控制";
+        gestureStatusEl.textContent = "手势控制没有开启：请确认网络、摄像头权限，或继续用鼠标控制。";
+      }
+    }
+
+    async function ensureMediaPipeHands() {
+      if (mediaPipeHands) return mediaPipeHands;
+      if (!mediaPipeHandsLoading) {
+        mediaPipeHandsLoading = withTimeout(loadMediaPipeHands(), GESTURE_LOAD_TIMEOUT).catch((error) => {
+          mediaPipeHandsLoading = null;
+          throw error;
+        });
+      }
+      return mediaPipeHandsLoading;
+    }
+
+    async function loadMediaPipeHands() {
+      await loadClassicScript(`${MEDIAPIPE_HANDS_BASE_URL}/hands.js`);
+      if (!window.Hands) throw new Error("MediaPipe Hands unavailable");
+      const hands = new window.Hands({
+        locateFile: (file) => `${MEDIAPIPE_HANDS_BASE_URL}/${file}`
+      });
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.68,
+        minTrackingConfidence: 0.68
+      });
+      hands.onResults((result) => {
+        mediaPipeHandsResult = result;
+        mediaPipeResultTime = performance.now();
+        mediaPipeHandsBusy = false;
+      });
+      mediaPipeHands = hands;
+      return hands;
+    }
+
+    function withTimeout(promise, timeout) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Gesture model load timeout")), timeout);
+        promise.then((value) => {
+          clearTimeout(timer);
+          resolve(value);
+        }).catch((error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+    }
+
+    function loadClassicScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", reject, { once: true });
+          if (window.Hands) resolve();
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Cannot load ${src}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    function stopGestureCamera() {
+      gestureEnabled = false;
+      if (gestureStream) {
+        gestureStream.getTracks().forEach((track) => track.stop());
+        gestureStream = null;
+      }
+      gestureVideo.srcObject = null;
+      gestureVideo.classList.remove("visible");
+      gestureOverlay.classList.remove("visible");
+      cameraButton.textContent = "开启手势控制";
+      gestureStatusEl.textContent = "摄像头未开启：张开五指后，靠近放大，远离缩小。";
+      gestureLastArea = 0;
+      gestureSmoothedArea = 0;
+      gestureAreaVelocity = 0;
+      gestureSmoothedX = 0;
+      gestureXVelocity = 0;
+      gestureFiveHold = 0;
+      gestureConfirmStart = 0;
+      gestureCalibrated = false;
+      gestureDistanceScatter = 0;
+      gestureStillFrames = 0;
+      gestureLostFrames = 0;
+    }
+
+    function trackGestureFrame() {
+      if (!gestureEnabled) return;
+      const hand = readOpenPalmHand();
+      if (hand) {
+        gestureFiveHold = Math.min(8, gestureFiveHold + 1);
+        if (!gestureCalibrated) {
+          updateGestureConfirmation(hand);
+        } else {
+          applyGestureControl(hand);
+        }
+        gestureLostFrames = 0;
+      } else {
+        gestureLostFrames++;
+        gestureFiveHold = Math.max(0, gestureFiveHold - 1);
+        if (!gestureCalibrated && gestureLostFrames > 10) {
+          gestureConfirmStart = 0;
+          gestureGuide.dataset.progress = "五指确认 0 / 4 秒";
+        }
+        if (gestureLostFrames > 10) {
+          gestureLastArea = 0;
+          gestureSmoothedArea = 0;
+          gestureAreaVelocity = 0;
+          gestureSmoothedX = 0;
+          gestureXVelocity = 0;
+        }
+        if (gestureLostFrames > 12) {
+          gestureStatusEl.textContent = gestureCalibrated
+            ? "五指手掌离开识别范围，控制暂停。"
+            : (gestureDebugMessage || "没有识别到五指张开的手掌：请像数字5一样摊开手并放入框内。");
+        }
+      }
+      requestAnimationFrame(trackGestureFrame);
+    }
+
+    function readOpenPalmHand() {
+      if (!mediaPipeReady) return null;
+      if (!gestureVideo.videoWidth || !gestureVideo.videoHeight) return null;
+
+      return readMediaPipeOpenPalmHand();
+    }
+
+    function readMediaPipeOpenPalmHand() {
+      if (!mediaPipeHands) return null;
+      const now = performance.now();
+      const videoTime = gestureVideo.currentTime;
+      if (!mediaPipeHandsBusy && videoTime !== gestureLastVideoTime && now - mediaPipeSendTime > 55) {
+        mediaPipeHandsBusy = true;
+        mediaPipeSendTime = now;
+        gestureLastVideoTime = videoTime;
+        mediaPipeHands.send({ image: gestureVideo }).catch(() => {
+          mediaPipeHandsBusy = false;
+        });
+      }
+      const landmarks = mediaPipeHandsResult && mediaPipeHandsResult.multiHandLandmarks && mediaPipeHandsResult.multiHandLandmarks[0];
+      if (mediaPipeResultTime <= mediaPipeConsumedTime) {
+        if (gestureLastDetectedHand && now - mediaPipeResultTime < 240) return gestureLastDetectedHand;
+        return null;
+      }
+      mediaPipeConsumedTime = mediaPipeResultTime;
+      if (!landmarks) {
+        gestureDebugMessage = "MediaPipe 已开启，但还没检测到手：请把整只五指手掌放进右下角框内。";
+        return null;
+      }
+      const hand = measureOpenPalm(landmarks, 0.82);
+      gestureLastDetectedHand = hand;
+      return hand;
+    }
+
+    function measureOpenPalm(landmarks, gestureScore) {
+      const wrist = landmarks[0];
+      const indexMcp = landmarks[5];
+      const middleMcp = landmarks[9];
+      const ringMcp = landmarks[13];
+      const pinkyMcp = landmarks[17];
+      const tips = [landmarks[4], landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
+      const pips = [landmarks[3], landmarks[6], landmarks[10], landmarks[14], landmarks[18]];
+      const palmCenterX = (wrist.x + indexMcp.x + middleMcp.x + ringMcp.x + pinkyMcp.x) / 5;
+      const palmCenterY = (wrist.y + indexMcp.y + middleMcp.y + ringMcp.y + pinkyMcp.y) / 5;
+      const roi = { left: 0.02, right: 0.98, top: 0.02, bottom: 0.98 };
+      if (palmCenterX < roi.left || palmCenterX > roi.right || palmCenterY < roi.top || palmCenterY > roi.bottom) {
+        gestureDebugMessage = "已检测到手，但手掌中心不在右下角识别框内。";
+        return null;
+      }
+
+      const palmWidth = distance2d(indexMcp, pinkyMcp);
+      const palmHeight = distance2d(wrist, middleMcp);
+      const minX = Math.min(...landmarks.map((point) => point.x));
+      const maxX = Math.max(...landmarks.map((point) => point.x));
+      const minY = Math.min(...landmarks.map((point) => point.y));
+      const maxY = Math.max(...landmarks.map((point) => point.y));
+      const handWidth = maxX - minX;
+      const handHeight = maxY - minY;
+      const fingertipSpan = distance2d(landmarks[4], landmarks[20]);
+      const palmScale = Math.max(0.001, handWidth * 0.56 + handHeight * 0.32 + fingertipSpan * 0.22);
+      const fingerOpen = [
+        distance2d(landmarks[4], wrist) > distance2d(landmarks[2], wrist) + palmScale * 0.03,
+        landmarks[8].y < landmarks[6].y + palmScale * 0.1 && distance2d(landmarks[8], wrist) > distance2d(landmarks[6], wrist) + palmScale * 0.02,
+        landmarks[12].y < landmarks[10].y + palmScale * 0.1 && distance2d(landmarks[12], wrist) > distance2d(landmarks[10], wrist) + palmScale * 0.02,
+        landmarks[16].y < landmarks[14].y + palmScale * 0.1 && distance2d(landmarks[16], wrist) > distance2d(landmarks[14], wrist) + palmScale * 0.02,
+        landmarks[20].y < landmarks[18].y + palmScale * 0.1 && distance2d(landmarks[20], wrist) > distance2d(landmarks[18], wrist) + palmScale * 0.02
+      ];
+      const extended = fingerOpen.filter(Boolean).length;
+      const spread = (
+        distance2d(landmarks[4], landmarks[8]) +
+        distance2d(landmarks[8], landmarks[12]) +
+        distance2d(landmarks[12], landmarks[16]) +
+        distance2d(landmarks[16], landmarks[20])
+      ) / palmScale;
+      if (extended < 5 || spread < 0.66) {
+        gestureDebugMessage = `已检测到手，但还不是五指张开：当前约 ${extended}/5 指，张开度 ${spread.toFixed(2)}。`;
+        return null;
+      }
+
+      gestureDebugMessage = "";
+      return {
+        area: palmScale,
+        centerX: palmCenterX,
+        centerY: palmCenterY,
+        boxWidth: handWidth,
+        boxHeight: handHeight,
+        fill: spread,
+        fiveScore: clamp((gestureScore * 0.62) + (extended / 5) * 0.26 + smoothstep(0.9, 1.55, spread) * 0.12, 0, 1)
+      };
+    }
+
+    function distance2d(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    function updateGestureConfirmation(hand) {
+      const now = performance.now();
+      if (!gestureConfirmStart) gestureConfirmStart = now;
+      const elapsed = Math.min(4000, now - gestureConfirmStart);
+      const seconds = (elapsed / 1000).toFixed(1);
+      gestureGuide.dataset.progress = `五指确认 ${seconds} / 4 秒`;
+      gestureStatusEl.textContent = `五指已识别，请保持不动 ${seconds} / 4 秒`;
+
+      if (elapsed >= 4000) {
+        gestureCalibrated = true;
+        gestureConfirmStart = 0;
+        gestureLastArea = 0;
+        gestureSmoothedArea = hand.area;
+        gestureAreaVelocity = 0;
+        gestureSmoothedX = hand.centerX;
+        gestureXVelocity = 0;
+        gestureStillFrames = 0;
+        gestureDistanceScatter = 0;
+        gestureGuide.dataset.progress = "确认完成：靠近放大，远离缩小并散开";
+        gestureStatusEl.textContent = "确认完成：五指靠近放大，停住定格，远离缩小并散开。";
+      }
+    }
+
+    function applyGestureControl(hand) {
+      gestureFrameCounter++;
+      if (gestureFiveHold < 2) {
+        gestureStatusEl.textContent = "请保持五指张开，稳定后开始控制。";
+        return;
+      }
+      if (!gestureSmoothedArea) gestureSmoothedArea = hand.area;
+      const previousArea = gestureSmoothedArea;
+      const limitedArea = previousArea + clamp(hand.area - previousArea, -0.015, 0.015);
+      gestureSmoothedArea += (limitedArea - gestureSmoothedArea) * 0.16;
+      const areaDelta = gestureSmoothedArea - previousArea;
+      gestureAreaVelocity = gestureAreaVelocity * 0.84 + areaDelta * 0.16;
+      gestureLastArea = gestureSmoothedArea;
+      if (!gestureSmoothedX) gestureSmoothedX = hand.centerX;
+      const previousX = gestureSmoothedX;
+      const limitedX = previousX + clamp(hand.centerX - previousX, -0.036, 0.036);
+      gestureSmoothedX += (limitedX - gestureSmoothedX) * 0.2;
+      const xDelta = gestureSmoothedX - previousX;
+      gestureXVelocity = gestureXVelocity * 0.8 + xDelta * 0.2;
+      if (Math.abs(gestureXVelocity) > 0.0021) {
+        targetRotationY -= gestureXVelocity * 2.55;
+      }
+      autoRotate = false;
+
+      const motion = Math.abs(gestureAreaVelocity);
+      if (motion < 0.00082) {
+        gestureStillFrames++;
+        if (gestureStillFrames >= 4) {
+          targetCameraDistance = cameraDistance;
+          targetZoom = zoom;
+        }
+      } else {
+        gestureStillFrames = 0;
+        const distanceProgress = clamp((targetCameraDistance - 1.85) / 6.45, 0, 1);
+        const movement = clamp((motion - 0.00082) * 3.65, 0.00072, 0.0082);
+        if (gestureAreaVelocity > 0) {
+          targetCameraDistance -= movement * (0.82 + distanceProgress * 0.28);
+          targetZoom += movement * 0.082;
+          gestureDistanceScatter += (0 - gestureDistanceScatter) * 0.18;
+        } else {
+          targetCameraDistance += movement * (0.42 + Math.pow(distanceProgress, 1.12) * 0.18);
+          targetZoom -= movement * 0.038;
+          gestureDistanceScatter = memoryMapActive ? 0 : clamp(gestureDistanceScatter + movement * 0.62, 0, 1);
+        }
+      }
+
+      targetCameraDistance = clamp(targetCameraDistance, 1.85, 8.3);
+      targetZoom = clamp(targetZoom, 0.55, 2.45);
+      if (gestureFrameCounter % 6 === 0) {
+        const action = motion < 0.00082 ? "定格" : gestureAreaVelocity > 0 ? "五指靠近，放大" : "五指远离，缩小并散开";
+        gestureStatusEl.textContent = `五指手掌：${hand.fiveScore.toFixed(2)}，尺度：${gestureSmoothedArea.toFixed(3)} / ${action}`;
+      }
+    }
+
+    function resize() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.floor(window.innerWidth * ratio);
+      const height = Math.floor(window.innerHeight * ratio);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      if (storyCanvas.width !== width || storyCanvas.height !== height) {
+        storyCanvas.width = width;
+        storyCanvas.height = height;
+      }
+      if (subtitleCanvas.width !== width || subtitleCanvas.height !== height) {
+        subtitleCanvas.width = width;
+        subtitleCanvas.height = height;
+        if (storySceneIndex >= 0) rebuildSubtitleParticles(storyScenes[storySceneIndex].caption);
+      }
+    }
+
+    function bindFloatBuffer(buffer, location, data, size, usage = gl.STATIC_DRAW) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      if (data) gl.bufferData(gl.ARRAY_BUFFER, data, usage);
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0);
+    }
+
+    function createProgram(vertexSource, fragmentSource) {
+      const vertexShader = createShader(gl.VERTEX_SHADER, vertexSource);
+      const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentSource);
+      const shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertexShader);
+      gl.attachShader(shaderProgram, fragmentShader);
+      gl.linkProgram(shaderProgram);
+      if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(shaderProgram) || "Program link failed");
+      }
+      return shaderProgram;
+    }
+
+    function createShader(type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(shader) || "Shader compile failed");
+      }
+      return shader;
+    }
+
+    function perspective(fovy, aspect, near, far) {
+      const f = 1.0 / Math.tan(fovy / 2);
+      const nf = 1 / (near - far);
+      return new Float32Array([
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (far + near) * nf, -1,
+        0, 0, (2 * far * near) * nf, 0
+      ]);
+    }
+
+    function identity() {
+      return new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+      ]);
+    }
+
+    function translate(x, y, z) {
+      return new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        x, y, z, 1
+      ]);
+    }
+
+    function scale(x, y, z) {
+      return new Float32Array([
+        x, 0, 0, 0,
+        0, y, 0, 0,
+        0, 0, z, 0,
+        0, 0, 0, 1
+      ]);
+    }
+
+    function rotateX(angle) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      return new Float32Array([
+        1, 0, 0, 0,
+        0, c, s, 0,
+        0, -s, c, 0,
+        0, 0, 0, 1
+      ]);
+    }
+
+    function rotateY(angle) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      return new Float32Array([
+        c, 0, -s, 0,
+        0, 1, 0, 0,
+        s, 0, c, 0,
+        0, 0, 0, 1
+      ]);
+    }
+
+    function multiply(a, b) {
+      const out = new Float32Array(16);
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 4; col++) {
+          out[col * 4 + row] =
+            a[0 * 4 + row] * b[col * 4 + 0] +
+            a[1 * 4 + row] * b[col * 4 + 1] +
+            a[2 * 4 + row] * b[col * 4 + 2] +
+            a[3 * 4 + row] * b[col * 4 + 3];
+        }
+      }
+      return out;
+    }
+
+    function triangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {
+      const abx = bx - ax;
+      const aby = by - ay;
+      const abz = bz - az;
+      const acx = cx - ax;
+      const acy = cy - ay;
+      const acz = cz - az;
+      const crossX = aby * acz - abz * acy;
+      const crossY = abz * acx - abx * acz;
+      const crossZ = abx * acy - aby * acx;
+      return 0.5 * Math.hypot(crossX, crossY, crossZ);
+    }
+
+    function pointOnTriangle(vertices, a, b, c, seed) {
+      let r1 = seededRandom(seed + 1);
+      let r2 = seededRandom(seed + 2);
+      if (r1 + r2 > 1) {
+        r1 = 1 - r1;
+        r2 = 1 - r2;
+      }
+      const r3 = 1 - r1 - r2;
+      return [
+        vertices[a] * r1 + vertices[b] * r2 + vertices[c] * r3,
+        vertices[a + 1] * r1 + vertices[b + 1] * r2 + vertices[c + 1] * r3,
+        vertices[a + 2] * r1 + vertices[b + 2] * r2 + vertices[c + 2] * r3
+      ];
+    }
+
+    function decimate(values, cap) {
+      const count = values.length / 3;
+      const sampled = new Float32Array(cap * 3);
+      const step = count / cap;
+      for (let i = 0; i < cap; i++) {
+        const sourceIndex = Math.floor(i * step) * 3;
+        sampled[i * 3] = values[sourceIndex];
+        sampled[i * 3 + 1] = values[sourceIndex + 1];
+        sampled[i * 3 + 2] = values[sourceIndex + 2];
+      }
+      return sampled;
+    }
+
+    function normalize3(x, y, z) {
+      const length = Math.hypot(x, y, z) || 1;
+      return [x / length, y / length, z / length];
+    }
+
+    function seededRandom(seed) {
+      const value = Math.sin(seed * 12.9898) * 43758.5453;
+      return value - Math.floor(value);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function mix(a, b, t) {
+      return a * (1 - t) + b * t;
+    }
+
+    function smoothstep(edge0, edge1, value) {
+      const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    function isSmallScreen() {
+      return Math.min(window.innerWidth, window.innerHeight) < 720;
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
+  </script>
+</body>
+</html>
+
